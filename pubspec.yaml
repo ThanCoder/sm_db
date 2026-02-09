@@ -1,0 +1,16 @@
+name: sm_db
+description: Small Database For Any Data Type.image Cover,Json Data,File Data with Meta.
+version: 0.1.0
+repository: https://github.com/ThanCoder/sm_db.git
+
+environment:
+  sdk: ^3.10.7
+
+# Add regular dependencies here.
+dependencies:
+  dart_core_extensions: ^0.1.1
+  # path: ^1.9.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
