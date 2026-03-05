@@ -1,20 +1,18 @@
+// ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:sm_db/src/records/db_records.dart';
 
-///
-/// Header (10 bytes): [Status(1),Type(1),Size(8)]
-///
 class CoverRecord extends DatabaseRecord {
   final Uint8List? imageBytes;
-  final int? offset;
   final int? size;
   CoverRecord({
     super.type = RecordType.cover,
-    this.offset,
+    super.dataStartOffset,
     this.size = 0,
     this.imageBytes,
+    super.id = 0,
   });
 
   factory CoverRecord.fromPath(String path) {
@@ -26,6 +24,9 @@ class CoverRecord extends DatabaseRecord {
   @override
   int get headerSize => 10;
 
+  ///
+  /// Header (10 bytes): [Status(1),Type(1),Size(8)]
+  ///
   @override
   Future<void> write(RandomAccessFile raf) async {
     final header = ByteData(headerSize);
@@ -37,10 +38,24 @@ class CoverRecord extends DatabaseRecord {
     await raf.writeFrom(imageBytes!);
   }
 
+  Future<Uint8List?> getData(RandomAccessFile raf) async {
+    if (dataStartOffset == null || size == null) return null;
+
+    final current = await raf.position();
+    await raf.setPosition(dataStartOffset!);
+
+    final data = await raf.read(size!);
+
+    await raf.setPosition(current);
+
+    return data;
+  }
+
   static Future<CoverRecord?> read(
     RandomAccessFile raf,
     RecordStatus status,
   ) async {
+    final current = await raf.position();
     final meta = ByteData.sublistView(await raf.read(8));
     final size = meta.getInt64(0);
     final offset = await raf.position();
@@ -50,6 +65,20 @@ class CoverRecord extends DatabaseRecord {
     if (status == RecordStatus.delete) {
       return null;
     }
-    return CoverRecord(size: size, offset: offset);
+    await raf.setPosition(current);
+
+    return CoverRecord(size: size, dataStartOffset: offset);
+  }
+
+  CoverRecord copyWith({
+    Uint8List? imageBytes,
+    int? dataStartOffset,
+    int? size,
+  }) {
+    return CoverRecord(
+      imageBytes: imageBytes ?? this.imageBytes,
+      dataStartOffset: dataStartOffset ?? this.dataStartOffset,
+      size: size ?? this.size,
+    );
   }
 }

@@ -6,19 +6,19 @@ import 'package:dart_core_extensions/dart_core_extensions.dart';
 import 'package:sm_db/src/records/db_records.dart';
 
 ///
-/// Header () -> [Status(1),Type(1),ID(8),InfoSize(8),FileSize(8)]
+/// Header (Offset: 26) -> [Status(1),Type(1),ID(8),InfoSize(8),FileSize(8)]
 ///
 class FileRecord extends DatabaseRecord {
-  final int id, fileSize, fileOffset;
+  final int fileSize;
   final Map<String, dynamic> info;
   final String? sourcePath;
   FileRecord({
-    super.type = RecordType.file,
-    this.sourcePath,
+    super.id = 0,
     required this.info,
-    required this.id,
+    this.sourcePath,
     this.fileSize = 0,
-    this.fileOffset = 0,
+    super.type = RecordType.file,
+    super.dataStartOffset,
   });
 
   factory FileRecord.fromPath(
@@ -114,7 +114,7 @@ class FileRecord extends DatabaseRecord {
       info: info,
       id: id,
       fileSize: fileSize,
-      fileOffset: fileOffset,
+      dataStartOffset: fileOffset,
     );
   }
 }
