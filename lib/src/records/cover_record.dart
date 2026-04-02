@@ -1,4 +1,3 @@
-// ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -53,7 +52,6 @@ class CoverRecord extends DatabaseRecord {
 
   static Future<CoverRecord?> read(
     RandomAccessFile raf,
-    RecordStatus status,
   ) async {
     final current = await raf.position();
     final meta = ByteData.sublistView(await raf.read(8));
@@ -62,9 +60,9 @@ class CoverRecord extends DatabaseRecord {
     // skip
     await raf.setPosition(offset + size);
 
-    if (status == RecordStatus.delete) {
-      return null;
-    }
+    // if (status == RecordStatus.delete) {
+    //   return null;
+    // }
     await raf.setPosition(current);
 
     return CoverRecord(size: size, dataStartOffset: offset);

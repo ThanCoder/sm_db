@@ -23,21 +23,33 @@ abstract class DatabaseRecord {
   int get headerSize;
   Future<void> write(RandomAccessFile raf);
 
-  Future<void> deleteAsMark(RandomAccessFile raf) async {
+  ///
+  /// ### Delete Mark Database Record
+  ///
+  Future<RecordStatus> deleteAsMark(RandomAccessFile raf) async {
     if (dataStartOffset == null) {
       SmDbEventsListener.instance.add(
         DBRecordDeleteAsMarkError(message: 'dataStartOffset is null'),
       );
-      return;
+      // Offset မရှိရင် လက်ရှိ status အတိုင်းပဲ ပြန်ပို့မယ်
+      return status;
     }
+
     final current = await raf.position();
-    //data offset ကို header size လျော့ထား
+
+    // 1. Header နေရာသို့ သွား၍ Status ကို Update လုပ်မည်
     await raf.setPosition(dataStartOffset! - headerSize);
-    // delete
+
+    // 2. Status ကို Delete အဖြစ် ပြောင်းလဲသတ်မှတ်မည်
     status = RecordStatus.delete;
-    //delete mark ထား
+
+    // 3. File ထဲသို့ Status Index ကို ရေးမည်
     await raf.writeByte(status.index);
 
+    // 4. မူလ Position သို့ ပြန်သွားမည်
     await raf.setPosition(current);
+
+    // 5. ပြောင်းလဲသွားသော Status ကို Return ပြန်ပေးမည်
+    return status;
   }
 }

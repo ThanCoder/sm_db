@@ -1,51 +1,96 @@
 import 'package:sm_db/sm_db.dart';
-import 'package:sm_db/src/events/sm_db_events_listener.dart';
-import 'package:sm_db/src/extensions/sm_db_record_extensions.dart';
-import 'package:sm_db/src/records/cover_record.dart';
-import 'package:sm_db/src/records/file_record.dart';
-import 'package:sm_db/src/records/json_record.dart';
 
 void main() async {
-  final db = SMDB();
+  final db = SMDB.getInstance();
   await db.open('test.db');
 
-  SmDbEventsListener.instance.stream.listen((event) {
-    print('$event: ${event.message}');
-  });
+  // SmDbEventsListener.instance.stream.listen((event) {
+  //   print('Event: $event: ${event.message}');
+  // });
 
-  // await db.addRecord(
-  //   JsonRecord(id: 1, data: {'id': 1, 'name': 'thancoder json 1'}),
-  // );
-  // await db.addRecord(
-  //   JsonRecord(id: 2, data: {'id': 2, 'name': 'thancoder json 2'}),
-  // );
-  // await db.addRecord(
-  //   JsonRecord(id: 3, data: {'id': 3, 'name': 'thancoder json 3'}),
-  // );
-  // await db.addRecord(CoverRecord.fromPath('/home/thancoder/Pictures/images.jpeg'));
+  db.registerAdapterNotExists<Post>(PostAdapter());
 
-  // await db.setCoverFormPath('/home/thancoder/Pictures/images.jpeg');
+  // final ad = db.getAdapter<Post>();
+  final box = db.getBox<Post>();
 
-  // await db.addRecord(
-  //   FileRecord.fromPath('/home/thancoder/Videos/Supernatural S1/11.mp4'),
-  //   onProgressFile: (progress) => print('progress: ${(progress * 100).toStringAsFixed(2)}%'),
+  // await box.add(Post(title: 'post one'));
+  // await box.add(Post(title: 'post two'));
+  // await box.add(Post(title: 'post three'));
 
-  // );
+  // await box.deleteById(11);
 
-  final list1 = await db.readAll();
+  await db.deleteAllJsonRecords();
 
-  await db.removeRecord(list1.first);
-
-  final list = await db.readAll();
-
-  print(list);
-  for (var e in list) {
-    if (e is JsonRecord) {
-      print('adapterTypeId: ${e.adapterTypeId}');
-      print('offset: ${e.dataStartOffset}');
-      print(e.data);
-    }
+  // print(await box.getAll());
+  for (var post in await box.getAll()) {
+    print('id: ${post.id} - ${post.title}');
   }
 
+  // await db.addFile('/home/thancoder/projects/plugins/sm_db/README.md');
+  // await db.addFile('/home/thancoder/projects/plugins/sm_db/CHANGELOG.md');
+
+  print('all record: ${await db.readAll()}');
+
+  // final files = await db.readAllFiles();
+  // await db.removeRecord(files.first);
+  // print(files.first.deleteAsMark(raf));
+
+  // for (var rec in await db.readAll()) {
+  //   print('Type: ${rec.type.name} - Id: ${rec.id}');
+  // }
+
+  // for (var rec in await db.readAllFiles()) {
+  //   print(
+  //     'id: ${rec.id} - Size: ${rec.fileSize} - Name: ${rec.name} - info: ${rec.info}',
+  //   );
+  //   await db.removeRecord(rec);
+  //   print('removed: ${rec.name}');
+  // }
+  // await db.extractAllFiles(
+  //   outDir: Directory('/home/thancoder/projects/plugins/sm_db/example/test'),
+  // );
+
   print('lastIndex: ${db.lastIndex}');
+  print('deletedCount: ${db.deletedCount}');
+  print('deletedSize: ${db.deletedSize}');
+
+  // if (db.coverRecod != null) {
+  //   print('cover record');
+  //   print(await db.getCoverData());
+  // }
+}
+
+class PostAdapter extends JsonDBAdapter<Post> {
+  @override
+  Post fromMap(Map<String, dynamic> map) {
+    return Post.fromJson(map);
+  }
+
+  @override
+  int get getUniqueFieldId => 1;
+
+  @override
+  int getId(Post value) {
+    return value.id;
+  }
+
+  @override
+  Map<String, dynamic> toMap(Post value) {
+    return value.toJson();
+  }
+}
+
+class Post {
+  final int id;
+  final String title;
+
+  const Post({this.id = 0, required this.title});
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'title': title};
+  }
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(id: json['id'], title: json['title']);
+  }
 }

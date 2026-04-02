@@ -2,19 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:sm_db/src/indexed/smdb_config.dart';
 import 'package:sm_db/src/records/db_records.dart';
 
 class JsonRecord extends DatabaseRecord {
   final int adapterTypeId;
   final int parentId;
-  final Map<String, dynamic> data;
+  final String jsonData;
   JsonRecord({
     super.type = RecordType.json,
     super.dataStartOffset,
     this.adapterTypeId = 0,
     this.parentId = 0,
     required super.id,
-    required this.data,
+    required this.jsonData,
   });
 
   @override
@@ -24,8 +25,12 @@ class JsonRecord extends DatabaseRecord {
   /// Header (27 bytes): [Status(1)][Type(1)][AdapterTypeId(1)][ID(8)][ParentID(8)][DataSize(8)]
   ///
   @override
-  Future<void> write(RandomAccessFile raf) async {
-    final jsonBytes = utf8.encode(jsonEncode(data));
+  Future<void> write(RandomAccessFile raf, {SMDBConfig? config}) async {
+    String data = jsonData;
+    if (config != null) {
+      data = config.compressJsonData(jsonData);
+    }
+    final jsonBytes = utf8.encode(data);
     final header = ByteData(headerSize);
     header.setInt8(0, status.index);
     header.setInt8(1, type.index);
@@ -40,9 +45,9 @@ class JsonRecord extends DatabaseRecord {
   }
 
   static Future<JsonRecord?> read(
-    RandomAccessFile raf,
-    RecordStatus status,
-  ) async {
+    RandomAccessFile raf, {
+    SMDBConfig? config,
+  }) async {
     final meta = ByteData.sublistView(
       await raf.read(25),
     ); // status,type ကို လျော့ထားပေးရမယ်
@@ -52,16 +57,15 @@ class JsonRecord extends DatabaseRecord {
     final jsonSize = meta.getInt64(17);
     var dataStartOffset = -1;
 
-    if (status == RecordStatus.delete) {
-      await raf.setPosition((await raf.position()) + jsonSize);
-      return null;
-    }
     dataStartOffset = await raf.position();
 
-    final data = jsonDecode(utf8.decode(await raf.read(jsonSize)));
+    String jsonData = utf8.decode(await raf.read(jsonSize));
+    if (config != null) {
+      jsonData = config.decompressJsonData(jsonData);
+    }
     return JsonRecord(
       id: id,
-      data: data,
+      jsonData: jsonData,
       parentId: parentId,
       adapterTypeId: adapterTypeId,
       dataStartOffset: dataStartOffset,

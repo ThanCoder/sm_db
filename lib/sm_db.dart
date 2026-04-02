@@ -5,4 +5,5 @@ library;
 
 export 'src/sm_db_base.dart';
 
-// TODO: Export any libraries intended for clients of this package.
+export 'src/extensions/sm_file_record_extensions.dart';
+export 'src/utils/json_db_adapter.dart';

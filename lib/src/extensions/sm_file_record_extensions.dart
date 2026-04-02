@@ -11,11 +11,7 @@ extension SmFileRecordExtensions on SMDB {
     bool Function()? isCancelledFile,
     void Function(double progress)? onProgressFile,
   }) async {
-    final fileRecord = FileRecord.fromPath(
-      path,
-      extraInfo: extraInfo,
-      id: lastIndex,
-    );
+    final fileRecord = FileRecord.fromPath(path, extraInfo: extraInfo);
     final (record, result) = await addRecord(
       fileRecord,
       isCancelledFile: isCancelledFile,
