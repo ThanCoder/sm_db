@@ -57,7 +57,8 @@ class IndexedDB {
 
   Future<void> loadIndexed() async {
     if (!dbFile.existsSync()) {
-      await writeHeader();
+      final raf = await File(dbFile.path).open(mode: FileMode.append);
+      await writeHeader(raf);
     }
     final (activeList, removeList) = await readAllRecords();
     _allActiveRecordList.clear();
@@ -84,13 +85,13 @@ class IndexedDB {
     }
   }
 
-  Future<void> writeHeader() async {
+  Future<void> writeHeader(RandomAccessFile raf) async {
     if (config.dbType.length != 4) {
       throw Exception(
         'Invalid DB type length: expected 4 bytes, got ${config.dbType.length}.',
       );
     }
-    final raf = await File(dbFile.path).open(mode: FileMode.append);
+
     await raf.writeFrom(utf8.encode(config.dbType));
     await raf.writeByte(config.dbVersion);
     await raf.close();
@@ -176,6 +177,9 @@ class IndexedDB {
     return (activeList, removeList);
   }
 
+  ///
+  /// ### When Database Remove [`Auto Compact`];
+  ///
   Future<void> mabyCompact() async {
     if (config.autoCompact &&
         (config.needToCompact(deletedCount, deletedSize))) {
@@ -183,8 +187,47 @@ class IndexedDB {
     }
   }
 
-  Future<void> compact() async {
-    // final (activeList, _) = await readAllRecords();
+  ///
+  /// Reduce Removed Record List
+  ///
+  /// Or DB Clean Up
+  ///
+  Future<void> compact({
+    bool Function()? isFileCancelled,
+    void Function(double progress)? onFileProgress,
+  }) async {
+    final (activeList, removeList) = await readAllRecords();
+    if (removeList.isEmpty) return;
+
+    final compactFile = File('${dbFile.path}.compact');
+    final compactRaf = await compactFile.open(mode: FileMode.write);
+
+    // write header
+    await writeHeader(compactRaf);
+    for (var rec in activeList) {
+      // write file
+      if (rec.type == RecordType.file) {
+        final fileRec = rec as FileRecord;
+        await fileRec.write(
+          compactRaf,
+          isCancelled: isFileCancelled,
+          onProgress: onFileProgress,
+        );
+      } else {
+        // other types
+        await rec.write(compactRaf);
+      }
+
+      // close compact raf
+      await compactRaf.close();
+      // config
+      if (config.whenCompactAndCreateBkFile) {
+        await dbFile.rename('${dbFile.path}.bk');
+      } else {
+        await dbFile.delete();
+      }
+      await compactFile.rename(dbFile.path);
+    }
   }
 
   ///

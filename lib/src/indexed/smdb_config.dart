@@ -6,6 +6,7 @@ bool defaultCompackLogic(int deletedCount, int deletedSize) =>
 
 class SMDBConfig {
   final bool autoCompact;
+  final bool whenCompactAndCreateBkFile;
   final bool saveLocalIndexLockFile;
 
   ///
@@ -18,6 +19,7 @@ class SMDBConfig {
 
   const SMDBConfig({
     required this.autoCompact,
+    required this.whenCompactAndCreateBkFile,
     required this.saveLocalIndexLockFile,
     required this.needToCompact,
     required this.dbType,
@@ -27,6 +29,7 @@ class SMDBConfig {
   factory SMDBConfig.empty() {
     return SMDBConfig(
       autoCompact: false,
+      whenCompactAndCreateBkFile: true,
       saveLocalIndexLockFile: false,
       needToCompact: defaultCompackLogic,
       dbType: 'SMDB',
@@ -40,9 +43,12 @@ class SMDBConfig {
     OnNeedToCompactCallback? needToCompact,
     String? dbType,
     int? dbVersion,
+    bool? whenCompactAndCreateBkFile,
   }) {
     return SMDBConfig(
       autoCompact: autoCompact ?? this.autoCompact,
+      whenCompactAndCreateBkFile:
+          whenCompactAndCreateBkFile ?? this.whenCompactAndCreateBkFile,
       saveLocalIndexLockFile:
           saveLocalIndexLockFile ?? this.saveLocalIndexLockFile,
       needToCompact: needToCompact ?? this.needToCompact,

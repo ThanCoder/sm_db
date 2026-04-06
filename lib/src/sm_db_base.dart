@@ -287,6 +287,30 @@ class SMDB {
   }
 
   ///
+  /// ### When Database Remove [`Auto Compact`];
+  ///
+  Future<void> mabyCompact() async {
+    await _indexedDB.mabyCompact();
+  }
+
+  ///
+  /// Reduce Removed Record List
+  ///
+  /// Or DB Clean Up
+  ///
+  ///  if (removeList.isEmpty) Not Do Anything.
+  ///
+  Future<void> compact({
+    bool Function()? isFileCancelled,
+    void Function(double progress)? onFileProgress,
+  }) async {
+    await _indexedDB.compact(
+      isFileCancelled: isFileCancelled,
+      onFileProgress: onFileProgress,
+    );
+  }
+
+  ///
   /// ### Get CoverRecord
   ///
   CoverRecord? get coverRecod => _indexedDB.coverRecord;

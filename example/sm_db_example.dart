@@ -25,6 +25,13 @@ void main() async {
     print('id: ${post.id} - ${post.title}');
   }
 
+  // print('Do Compact');
+  // await Future.delayed(Duration(seconds: 3));
+  // await db.compact(
+  //   onFileProgress: (progress) =>
+  //       print('Compact: progress: ${progress * 0.1}%'),
+  // );
+
   // await db.addFile('/home/thancoder/projects/plugins/sm_db/README.md');
   // await db.addFile('/home/thancoder/projects/plugins/sm_db/CHANGELOG.md');
 
