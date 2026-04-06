@@ -25,7 +25,7 @@ class JsonDBBox<T> {
     final (record, bool) = await _indexedDB.db.addRecord(
       JsonRecord(
         id: id,
-        jsonData: _adapter.toJson(map),
+        jsonData: _adapter.encodeData(map),
         adapterTypeId: _adapter.getUniqueFieldId,
         parentId: _adapter.getParentId,
       ),
@@ -56,8 +56,25 @@ class JsonDBBox<T> {
       }
       final jsr = record as JsonRecord;
       if (jsr.adapterTypeId != _adapter.getUniqueFieldId) continue;
-      list.add(_adapter.fromMap(_adapter.fromJson(jsr.jsonData)));
+      list.add(_adapter.fromMap(_adapter.decodeData(jsr.jsonData)));
     }
     return list;
+  }
+
+  Stream<T> getAllStream() async* {
+    final res = await _indexedDB.db.readAll();
+    for (var record in res) {
+      // json ပဲရယူမယ်
+      if (record.status == RecordStatus.delete ||
+          record.type != RecordType.json) {
+        continue;
+      }
+      final jsr = record as JsonRecord;
+      if (jsr.adapterTypeId != _adapter.getUniqueFieldId) continue;
+      final value = _adapter.fromMap(_adapter.decodeData(jsr.jsonData)) as T;
+      //delay
+      // await Future.delayed(Duration(seconds: 1));
+      yield value;
+    }
   }
 }

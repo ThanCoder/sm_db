@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,7 +7,7 @@ import 'package:sm_db/src/records/db_records.dart';
 class JsonRecord extends DatabaseRecord {
   final int adapterTypeId;
   final int parentId;
-  final String jsonData;
+  final Uint8List jsonData;
   JsonRecord({
     super.type = RecordType.json,
     super.dataStartOffset,
@@ -26,11 +25,7 @@ class JsonRecord extends DatabaseRecord {
   ///
   @override
   Future<void> write(RandomAccessFile raf, {SMDBConfig? config}) async {
-    String data = jsonData;
-    if (config != null) {
-      data = config.compressJsonData(jsonData);
-    }
-    final jsonBytes = utf8.encode(data);
+    final jsonBytes = jsonData;
     final header = ByteData(headerSize);
     header.setInt8(0, status.index);
     header.setInt8(1, type.index);
@@ -44,10 +39,7 @@ class JsonRecord extends DatabaseRecord {
     await raf.writeFrom(jsonBytes);
   }
 
-  static Future<JsonRecord?> read(
-    RandomAccessFile raf, {
-    SMDBConfig? config,
-  }) async {
+  static Future<JsonRecord?> read(RandomAccessFile raf) async {
     final meta = ByteData.sublistView(
       await raf.read(25),
     ); // status,type ကို လျော့ထားပေးရမယ်
@@ -59,10 +51,7 @@ class JsonRecord extends DatabaseRecord {
 
     dataStartOffset = await raf.position();
 
-    String jsonData = utf8.decode(await raf.read(jsonSize));
-    if (config != null) {
-      jsonData = config.decompressJsonData(jsonData);
-    }
+    final jsonData = await raf.read(jsonSize);
     return JsonRecord(
       id: id,
       jsonData: jsonData,

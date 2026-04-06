@@ -13,10 +13,15 @@ class SMDBConfig {
   ///
   final OnNeedToCompactCallback needToCompact;
 
+  final String dbType;
+  final int dbVersion;
+
   const SMDBConfig({
-    this.autoCompact = true,
-    this.saveLocalIndexLockFile = false,
+    required this.autoCompact,
+    required this.saveLocalIndexLockFile,
     required this.needToCompact,
+    required this.dbType,
+    required this.dbVersion,
   });
 
   factory SMDBConfig.empty() {
@@ -24,27 +29,25 @@ class SMDBConfig {
       autoCompact: false,
       saveLocalIndexLockFile: false,
       needToCompact: defaultCompackLogic,
+      dbType: 'SMDB',
+      dbVersion: 1,
     );
-  }
-
-  String compressJsonData(String data) {
-    return data;
-  }
-
-  String decompressJsonData(String data) {
-    return data;
   }
 
   SMDBConfig copyWith({
     bool? autoCompact,
     bool? saveLocalIndexLockFile,
     OnNeedToCompactCallback? needToCompact,
+    String? dbType,
+    int? dbVersion,
   }) {
     return SMDBConfig(
       autoCompact: autoCompact ?? this.autoCompact,
       saveLocalIndexLockFile:
           saveLocalIndexLockFile ?? this.saveLocalIndexLockFile,
       needToCompact: needToCompact ?? this.needToCompact,
+      dbType: dbType ?? this.dbType,
+      dbVersion: dbVersion ?? this.dbVersion,
     );
   }
 }

@@ -238,13 +238,12 @@ class SMDB {
     await raf.close();
     // add index db
     _indexedDB.addRecord(record);
-    _indexedDB.mabyCompact();
 
     return (record, result);
   }
 
   ///
-  /// ## Remove Database Record
+  /// ### Remove Database Record
   ///
   Future<bool> removeRecord(
     DatabaseRecord record, {
@@ -266,6 +265,28 @@ class SMDB {
   }
 
   ///
+  /// ### Remove Multi Database Record
+  ///
+  Future<bool> removeMultiRecord(List<DatabaseRecord> records) async {
+    final file = File(path);
+    final raf = await file.open(mode: FileMode.append);
+
+    for (var record in records) {
+      if (record.status == RecordStatus.delete) return false;
+      // delete mark
+      final recordStatus = await record.deleteAsMark(raf);
+
+      record.status = recordStatus;
+      // remove indexDB list
+      await _indexedDB.removeRecord(record, isCallMabyCompact: false);
+    }
+    await raf.close();
+    await _indexedDB.mabyCompact();
+
+    return false;
+  }
+
+  ///
   /// ### Get CoverRecord
   ///
   CoverRecord? get coverRecod => _indexedDB.coverRecord;
@@ -278,6 +299,22 @@ class SMDB {
   int get deletedCount => _indexedDB.deletedCount;
 
   int get deletedSize => _indexedDB.deletedSize;
+
+  (String, int)? get header => _indexedDB.header;
+
+  ///
+  /// Read Rader From Database Files
+  ///
+  static Future<(String, int)> readHeaderFromPath(
+    String dbPath, {
+    required String type,
+    required int version,
+  }) async {
+    final raf = await File(dbPath).open();
+    final res = await IndexedDB.readHeader(raf, type: type, version: version);
+    await raf.close();
+    return res;
+  }
 }
 
 // Future<void> _addFileRecordInBackground((String, FileRecord) params) async {}

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -21,8 +22,11 @@ class IndexedDB {
   CoverRecord? _coverRecord;
   final List<DatabaseRecord> _allActiveRecordList = [];
   final List<DatabaseRecord> _allDeleteRecordList = [];
-  List<DatabaseRecord> get allRecordList => _allActiveRecordList;
+  (String, int)? _header;
 
+  (String, int)? get header => _header;
+
+  List<DatabaseRecord> get allRecordList => _allActiveRecordList;
   // getter
   int get lastIndex => _lastIndex;
 
@@ -52,7 +56,9 @@ class IndexedDB {
   }
 
   Future<void> loadIndexed() async {
-    if (!dbFile.existsSync()) return;
+    if (!dbFile.existsSync()) {
+      await writeHeader();
+    }
     final (activeList, removeList) = await readAllRecords();
     _allActiveRecordList.clear();
     _allDeleteRecordList.clear();
@@ -78,6 +84,42 @@ class IndexedDB {
     }
   }
 
+  Future<void> writeHeader() async {
+    if (config.dbType.length != 4) {
+      throw Exception(
+        'Invalid DB type length: expected 4 bytes, got ${config.dbType.length}.',
+      );
+    }
+    final raf = await File(dbFile.path).open(mode: FileMode.append);
+    await raf.writeFrom(utf8.encode(config.dbType));
+    await raf.writeByte(config.dbVersion);
+    await raf.close();
+  }
+
+  ///
+  /// ### Read Header
+  ///
+  /// Return `(type, version)`
+  ///
+  static Future<(String, int)> readHeader(
+    RandomAccessFile raf, {
+    required String type,
+    required int version,
+  }) async {
+    final typeBytes = await raf.read(4);
+    if (typeBytes.isEmpty) {
+      throw Exception('Database Type Not Found!');
+    }
+    final type = utf8.decode(typeBytes);
+
+    final version = await raf.readByte();
+    if (type != type) {
+      throw Exception('Invalid Database Type: excepted `$type` got `$type`');
+    }
+
+    return (type, version);
+  }
+
   ///
   /// ## Read All `Active` Records
   /// Return -> `(activeList, removeList)`
@@ -88,6 +130,13 @@ class IndexedDB {
 
     final raf = await File(dbFile.path).open();
     final total = await raf.length();
+    // read header
+    _header = await readHeader(
+      raf,
+      type: config.dbType,
+      version: config.dbVersion,
+    );
+
     while (await raf.position() < total) {
       // header ကိုအရင် ဖတ်မယ်
       final status = RecordStatus.values[await raf.readByte()];
