@@ -11,7 +11,8 @@ class FileRecord extends DatabaseRecord {
   final Map<String, dynamic> info;
   final String? sourcePath;
   final String name;
-  final int infoSize;
+  int infoSize;
+
   FileRecord({
     super.id = 0,
     required this.info,
@@ -63,6 +64,7 @@ class FileRecord extends DatabaseRecord {
     final infoBytes = utf8.encode(jsonEncode(info));
     final file = File(sourcePath!);
     final fSize = file.lengthSync();
+    infoSize = infoSize;
 
     final header = ByteData(headerSize);
     header.setInt8(0, status.index);
@@ -105,7 +107,7 @@ class FileRecord extends DatabaseRecord {
   ///
   @override
   Future<RecordStatus> deleteAsMark(RandomAccessFile raf) async {
-    if (dataStartOffset == null) {
+    if (dataStartOffset == -1) {
       SmDbEventsListener.instance.add(
         DBRecordDeleteAsMarkError(message: 'dataStartOffset is null'),
       );
@@ -116,7 +118,7 @@ class FileRecord extends DatabaseRecord {
     final current = await raf.position();
 
     // 1. Header နေရာသို့ သွား၍ Status ကို Update လုပ်မည်
-    await raf.setPosition((dataStartOffset! - infoSize) - headerSize);
+    await raf.setPosition((dataStartOffset - infoSize) - headerSize);
 
     // 2. Status ကို Delete အဖြစ် ပြောင်းလဲသတ်မှတ်မည်
     status = RecordStatus.delete;
@@ -136,19 +138,19 @@ class FileRecord extends DatabaseRecord {
   ///
   Future<void> extract(
     RandomAccessFile raf, {
-    required Directory outDir,
+    required String savePath,
     bool Function()? isCancelled,
     void Function(double progress)? onProgress,
   }) async {
-    if (dataStartOffset == null) {
-      throw Exception('File `dataStartOffset` is Null');
+    if (dataStartOffset == -1) {
+      throw Exception('File `dataStartOffset` is -1');
     }
     final currentPos = await raf.position();
     // go to
-    await raf.setPosition(dataStartOffset!);
+    await raf.setPosition(dataStartOffset);
 
     // 2. Output file ကို အသစ်ဆောက်မည်
-    final outputFile = File('${outDir.path}${Platform.pathSeparator}$name');
+    final outputFile = File(savePath);
     final ios = await outputFile.open(mode: FileMode.write);
 
     int bytesReaded = 0;

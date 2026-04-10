@@ -48,7 +48,7 @@ class SMDB {
   ///
   /// Usage `db.registerAdapterNotExists<User>(UserAdapter());`
   ///
-  void registerAdapterNotExists<T>(JsonDBAdapter adapter) {
+  void registerAdapterNotExists<T>(JsonDBAdapter<T> adapter) {
     if (_adapters.containsKey(T)) return;
     final ids = _adapters.values.map((e) => e.getUniqueFieldId);
     if (ids.contains(adapter.getUniqueFieldId)) {
@@ -106,6 +106,8 @@ class SMDB {
   ///
   /// ### Close Database
   ///
+  /// No Working For Now
+  /// 
   Future<void> close() async {}
 
   ///
@@ -116,11 +118,39 @@ class SMDB {
   }
 
   ///
+  /// Export Cover File
+  ///
+  Future<bool> exportCoverFile(String path) async {
+    final outFile = File(path);
+    final data = await _indexedDB.getCoverData();
+    if (data == null) return false;
+    await outFile.writeAsBytes(data);
+    return true;
+  }
+
+  ///
+  /// ### Delete Cover
+  ///
+  /// Return `<isDeleted>`
+  ///
+  Future<bool> deleteCover() async {
+    final cover = _indexedDB.coverRecord;
+    if (cover == null) return false;
+    await removeRecord(cover);
+    return true;
+  }
+
+  ///
   /// ### SetCover From Path
   ///
   Future<bool> setCoverFormPath(String path) async {
+    if (!File(path).existsSync()) {
+      throw Exception('File Not Found!: `$path`');
+    }
     // ရှိနေရင် auto delete cover data
-    await _indexedDB.deleteCover();
+    if (_indexedDB.coverRecord != null) {
+      await removeRecord(_indexedDB.coverRecord!, isCallMabyCompact: false);
+    }
 
     final record = CoverRecord.fromPath(path);
     final (_, result) = await addRecord(record);
@@ -132,7 +162,17 @@ class SMDB {
   ///
   Future<List<DatabaseRecord>> readAll() async {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
-    return _indexedDB.allRecordList;
+    return _indexedDB.allActiveRecordList;
+  }
+
+  ///
+  /// ### Get By Id
+  ///
+  Future<DatabaseRecord?> getById(int id) async {
+    if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
+    final index = _indexedDB.allActiveRecordList.indexWhere((e) => e.id == id);
+    if (index == -1) return null;
+    return _indexedDB.allActiveRecordList[index];
   }
 
   ///
@@ -142,7 +182,7 @@ class SMDB {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
     List<FileRecord> list = [];
 
-    for (var rec in _indexedDB.allRecordList) {
+    for (var rec in _indexedDB.allActiveRecordList) {
       if (rec.type != RecordType.file) continue;
       list.add(rec as FileRecord);
     }
@@ -156,7 +196,7 @@ class SMDB {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
     List<JsonRecord> list = [];
 
-    for (var rec in _indexedDB.allRecordList) {
+    for (var rec in _indexedDB.allActiveRecordList) {
       if (rec.type != RecordType.json) continue;
       list.add(rec as JsonRecord);
     }
@@ -175,13 +215,35 @@ class SMDB {
     final raf = await File(path).open();
 
     for (var file in await readAllFiles()) {
+      final savePath = '${outDir.path}${Platform.pathSeparator}${file.name}';
       await file.extract(
         raf,
-        outDir: outDir,
+        savePath: savePath,
         isCancelled: isCancelled,
         onProgress: onProgress,
       );
     }
+    await raf.close();
+  }
+
+  ///
+  /// ### Extract File
+  ///
+  Future<void> extractFile(
+    FileRecord fileRecord, {
+    required String savePath,
+    bool Function()? isCancelled,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
+    final raf = await File(path).open();
+
+    await fileRecord.extract(
+      raf,
+      savePath: savePath,
+      isCancelled: isCancelled,
+      onProgress: onProgress,
+    );
     await raf.close();
   }
 
@@ -207,8 +269,17 @@ class SMDB {
 
   ///
   /// ### Add Database Record
+  ///
   /// Return-> `(record, result)`
   ///
+  ///  `parentId ?? JsonDBAdapter.getParentId(T value)`
+  ///
+  /// ```dart
+  /// /// For JsonRecord
+  /// abstract class JsonDBAdapter<T>
+  ///   int getParentId(T value) => -1; <--- Need To Override
+  ///
+  ///```
   Future<(DatabaseRecord, bool)> addRecord(
     DatabaseRecord record, {
     bool Function()? isCancelledFile,
@@ -235,15 +306,37 @@ class SMDB {
       await record.write(raf);
       result = true;
     }
-    await raf.close();
+
     // add index db
-    _indexedDB.addRecord(record);
+    if (record is JsonRecord) {
+      record.jsonBytes = null;
+    }
+    await _indexedDB.addRecordToRAM(record);
+
+    await raf.close();
 
     return (record, result);
   }
 
   ///
+  /// ### Remove Record By Id
+  ///
+  Future<bool> removeRecordById(int id) async {
+    final index = _indexedDB.allActiveRecordList.indexWhere((e) => e.id == id);
+    if (index == -1) {
+      throw Exception('Not Found ID:`$id` In indexedDB.allActiveRecordList');
+    }
+    final res = await _indexedDB.db.removeRecord(
+      _indexedDB.allActiveRecordList[index],
+    );
+
+    return res;
+  }
+
+  ///
   /// ### Remove Database Record
+  ///
+  /// Return -> isDeleted
   ///
   Future<bool> removeRecord(
     DatabaseRecord record, {
@@ -252,16 +345,19 @@ class SMDB {
     final file = File(path);
     final raf = await file.open(mode: FileMode.append);
 
-    if (record.status == RecordStatus.delete) return false;
+    if (record.status == RecordStatus.delete) return true;
     // delete mark
     final recordStatus = await record.deleteAsMark(raf);
 
     record.status = recordStatus;
     // remove indexDB list
-    await _indexedDB.removeRecord(record, isCallMabyCompact: isCallMabyCompact);
+    await _indexedDB.removeRecordToRAM(
+      record,
+      isCallMabyCompact: isCallMabyCompact,
+    );
 
     await raf.close();
-    return false;
+    return true;
   }
 
   ///
@@ -278,7 +374,7 @@ class SMDB {
 
       record.status = recordStatus;
       // remove indexDB list
-      await _indexedDB.removeRecord(record, isCallMabyCompact: false);
+      await _indexedDB.removeRecordToRAM(record, isCallMabyCompact: false);
     }
     await raf.close();
     await _indexedDB.mabyCompact();
@@ -301,13 +397,10 @@ class SMDB {
   ///  if (removeList.isEmpty) Not Do Anything.
   ///
   Future<void> compact({
-    bool Function()? isFileCancelled,
-    void Function(double progress)? onFileProgress,
+    bool Function()? isCancelled,
+    void Function(double progress)? onProgress,
   }) async {
-    await _indexedDB.compact(
-      isFileCancelled: isFileCancelled,
-      onFileProgress: onFileProgress,
-    );
+    await _indexedDB.compact(isCancelled: isCancelled, onProgress: onProgress);
   }
 
   ///
@@ -340,5 +433,3 @@ class SMDB {
     return res;
   }
 }
-
-// Future<void> _addFileRecordInBackground((String, FileRecord) params) async {}

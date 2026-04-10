@@ -8,14 +8,14 @@ extension SmFileRecordExtensions on SMDB {
   Future<(FileRecord, bool)> addFile(
     String path, {
     Map<String, dynamic> extraInfo = const {},
-    bool Function()? isCancelledFile,
-    void Function(double progress)? onProgressFile,
+    bool Function()? isCancelled,
+    void Function(double progress)? onProgress,
   }) async {
     final fileRecord = FileRecord.fromPath(path, extraInfo: extraInfo);
     final (record, result) = await addRecord(
       fileRecord,
-      isCancelledFile: isCancelledFile,
-      onProgressFile: onProgressFile,
+      isCancelledFile: isCancelled,
+      onProgressFile: onProgress,
     );
     return (record as FileRecord, result);
   }

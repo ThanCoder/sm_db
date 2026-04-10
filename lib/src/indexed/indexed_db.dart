@@ -26,7 +26,8 @@ class IndexedDB {
 
   (String, int)? get header => _header;
 
-  List<DatabaseRecord> get allRecordList => _allActiveRecordList;
+  List<DatabaseRecord> get allActiveRecordList => _allActiveRecordList;
+
   // getter
   int get lastIndex => _lastIndex;
 
@@ -35,7 +36,7 @@ class IndexedDB {
     return _lastIndex;
   }
 
-  Future<void> removeRecord(
+  Future<void> removeRecordToRAM(
     DatabaseRecord record, {
     bool isCallMabyCompact = true,
   }) async {
@@ -51,14 +52,16 @@ class IndexedDB {
     }
   }
 
-  void addRecord(DatabaseRecord record) {
+  Future<void> addRecordToRAM(DatabaseRecord record) async {
     _allActiveRecordList.add(record);
+    // print('Added to RAM: ${_allActiveRecordList.length}');
   }
 
   Future<void> loadIndexed() async {
     if (!dbFile.existsSync()) {
       final raf = await File(dbFile.path).open(mode: FileMode.append);
       await writeHeader(raf);
+      await raf.close();
     }
     final (activeList, removeList) = await readAllRecords();
     _allActiveRecordList.clear();
@@ -94,7 +97,6 @@ class IndexedDB {
 
     await raf.writeFrom(utf8.encode(config.dbType));
     await raf.writeByte(config.dbVersion);
-    await raf.close();
   }
 
   ///
@@ -139,19 +141,19 @@ class IndexedDB {
     );
 
     while (await raf.position() < total) {
-      // header ကိုအရင် ဖတ်မယ်
-      final status = RecordStatus.values[await raf.readByte()];
+      final statusByte = await raf.readByte();
+      if (statusByte == -1) break; // End of file
+
+      final status = RecordStatus.values[statusByte];
       final type = RecordType.values[await raf.readByte()];
 
       DatabaseRecord? record;
       // print(type);
       switch (type) {
         case RecordType.cover:
-          final coverRecord = await CoverRecord.read(raf);
-          if (coverRecord != null && status == RecordStatus.delete) {
-            _allDeleteRecordList.add(coverRecord);
-          } else {
-            _coverRecord = coverRecord;
+          record = await CoverRecord.read(raf);
+          if (record != null && record.status == RecordStatus.active) {
+            _coverRecord = (record as CoverRecord);
           }
           break;
         case RecordType.json:
@@ -193,41 +195,60 @@ class IndexedDB {
   /// Or DB Clean Up
   ///
   Future<void> compact({
-    bool Function()? isFileCancelled,
-    void Function(double progress)? onFileProgress,
+    bool Function()? isCancelled,
+    void Function(double progress)? onProgress,
   }) async {
     final (activeList, removeList) = await readAllRecords();
     if (removeList.isEmpty) return;
 
+    final sourceRaf = await dbFile.open();
     final compactFile = File('${dbFile.path}.compact');
     final compactRaf = await compactFile.open(mode: FileMode.write);
 
     // write header
     await writeHeader(compactRaf);
-    for (var rec in activeList) {
-      // write file
-      if (rec.type == RecordType.file) {
-        final fileRec = rec as FileRecord;
-        await fileRec.write(
-          compactRaf,
-          isCancelled: isFileCancelled,
-          onProgress: onFileProgress,
-        );
-      } else {
-        // other types
-        await rec.write(compactRaf);
-      }
 
-      // close compact raf
-      await compactRaf.close();
-      // config
-      if (config.whenCompactAndCreateBkFile) {
-        await dbFile.rename('${dbFile.path}.bk');
-      } else {
-        await dbFile.delete();
+    for (var rec in activeList) {
+      int recordTotalSize = 0;
+      int startOffset = -1;
+      if (rec.type == RecordType.cover) {
+        final record = (rec as CoverRecord);
+        startOffset = record.dataStartOffset - record.headerSize;
+        recordTotalSize = record.headerSize + record.size;
       }
-      await compactFile.rename(dbFile.path);
+      if (rec.type == RecordType.json) {
+        final record = (rec as JsonRecord);
+        startOffset = record.dataStartOffset - record.headerSize;
+        recordTotalSize = record.headerSize + record.jsonSize;
+      }
+      if (rec.type == RecordType.file) {
+        final record = (rec as FileRecord);
+        startOffset =
+            (record.dataStartOffset - record.infoSize) - record.headerSize;
+        recordTotalSize = record.headerSize + record.infoSize + record.fileSize;
+      }
+      if (startOffset == -1 || recordTotalSize == 0) continue;
+
+      await rec.transferRecord(
+        sourceRaf: sourceRaf,
+        targetRaf: compactRaf,
+        startOffset: startOffset,
+        recordTotalSize: recordTotalSize,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      );
     }
+
+    // close compact raf
+    await compactRaf.close();
+    // config
+    if (config.whenCompactAndCreateBkFile) {
+      await dbFile.rename('${dbFile.path}.bk');
+    } else {
+      await dbFile.delete();
+    }
+    await compactFile.rename(dbFile.path);
+    await loadIndexed();
   }
 
   ///
@@ -244,10 +265,10 @@ class IndexedDB {
         size += rec.fileSize;
       }
       if (rec is JsonRecord) {
-        size += rec.jsonData.length;
+        size += rec.jsonSize;
       }
       if (rec is CoverRecord) {
-        size += rec.size ?? 0;
+        size += rec.size;
       }
     }
     return size;
@@ -257,27 +278,14 @@ class IndexedDB {
   /// ## Cover Image Data
   ///
   Future<Uint8List?> getCoverData() async {
+    print('record: $_coverRecord');
     if (_coverRecord == null ||
         !dbFile.existsSync() ||
-        _coverRecord!.dataStartOffset == null) {
+        _coverRecord!.dataStartOffset == -1) {
       return null;
     }
     final raf = await dbFile.open();
     return await _coverRecord!.getData(raf);
-  }
-
-  ///
-  /// ### Remove Cover Data
-  ///
-  Future<bool> deleteCover() async {
-    if (_coverRecord == null) return false;
-    final raf = await dbFile.open(mode: FileMode.append);
-
-    await coverRecord!.deleteAsMark(raf);
-
-    await raf.close();
-    _coverRecord = null;
-    return true;
   }
 
   ///

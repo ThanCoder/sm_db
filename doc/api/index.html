@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
+  <meta name="description" content="sm_db API docs, for the Dart programming language.">
+  <title>sm_db - Dart API docs</title>
+
+
+  
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  
+  <link rel="stylesheet" href="static-assets/github.css?v1">
+  <link rel="stylesheet" href="static-assets/styles.css?v1">
+  <link rel="icon" href="static-assets/favicon.png?v1">
+  
+</head>
+
+<body data-base-href="" data-using-base-href="false" class="light-theme">
+<div id="overlay-under-drawer"></div>
+<header id="title">
+  <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
+  <ol class="breadcrumbs gt-separated dark hidden-xs">
+    <li class="self-crumb">sm_db package</li>
+  </ol>
+  <div class="self-name">sm_db</div>
+  <form class="search navbar-right" role="search">
+    <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+  <button class="toggle" id="theme-button" title="Toggle between light and dark mode" aria-label="Light and dark mode toggle">
+    <span id="dark-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      dark_mode
+    </span>
+    <span id="light-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      light_mode
+    </span>
+  </button>
+</header>
+<main>
+  <div id="dartdoc-main-content" class="main-content">
+      
+<section class="desc markdown">
+  <h1 id="smdb">SMDB</h1>
+<p>A lightweight, reactive, and efficient NoSQL database for Flutter and Dart. It supports object storage via adapters, file management, and real-time data streaming.</p>
+<h2 id="smdb-simple-mobile-database">SMDB (Simple Mobile Database)</h2>
+<p>SMDB is a high-performance, indexed binary database designed for Flutter/Dart. It supports multiple record types including JSON, Binary Files, and Cover Images, utilizing an append-only architecture with an automated Compaction mechanism to keep the database clean and efficient.</p>
+<h2 id="-key-features">🚀 Key Features</h2>
+<ul>
+<li>
+<p><strong>Hybrid Storage</strong>: Store structured JSON data and large binary files in a single database file.</p>
+</li>
+<li>
+<p><strong>Indexed Access</strong>: Maintains an in-memory index for fast lookups and efficient record management.</p>
+</li>
+<li>
+<p><strong>Smart Compaction</strong>: Automatically removes "deleted" marks and reorganizes the file to save disk space.</p>
+</li>
+<li>
+<p><strong>Progress Tracking</strong>: Built-in support for progress callbacks and cancellation during large file operations or compaction.</p>
+</li>
+<li>
+<p><strong>Event Driven</strong>: Integrated EventBus for monitoring database changes.</p>
+</li>
+<li>
+<p><strong>Singleton Pattern</strong>: Easy access from anywhere in your app via SMDB.getInstance().</p>
+</li>
+</ul>
+<h2 id="-core-concepts">🛠 Core Concepts</h2>
+<h3 id="1-record-types">1. Record Types</h3>
+<h3 id="the-database-handles-three-primary-record-types">The database handles three primary record types:</h3>
+<ul>
+<li>
+<p><strong>CoverRecord</strong>: Used for a single database "cover" or preview image.</p>
+</li>
+<li>
+<p><strong>JsonRecord</strong>: For structured data (Maps/Lists). Requires a JsonDBAdapter.</p>
+</li>
+<li>
+<p><strong>FileRecord</strong>: For storing large binary blobs (Images, Videos, PDFs) without loading them into memory.</p>
+</li>
+</ul>
+<h3 id="2-append-only-logic">2. Append-Only Logic</h3>
+<p>When you add or delete data, SMDB appends a "Mark" or new data to the end of the file. This ensures fast write operations. 3. Compaction</p>
+<p>Deleted records are not immediately removed from the physical disk to prevent slow file-reconstruction. The compact() method creates a new, clean version of the database containing only Active records.</p>
+<h2 id="installation">Installation</h2>
+<p>Add <code>sm_db</code> to your <code>pubspec.yaml</code>:</p>
+<pre class="language-yaml"><code class="language-yaml">dependencies:
+  sm_db: ^latest_version
+</code></pre>
+<h2 id="example">Example</h2>
+<pre class="language-dart"><code class="language-dart">final db = SMDB.getInstance();
+  await db.open('test.db');
+
+  db.registerAdapterNotExists&lt;Post&gt;(PostAdapter());
+  db.registerAdapterNotExists&lt;PostContent&gt;(PostContentAdapter());
+
+  final box = db.getBox&lt;Post&gt;();
+  final contentBox = db.getBox&lt;PostContent&gt;();
+
+  //Return (addedValue,record, isAdded)
+  final (value, _, _) = await box.add(Post(title: 'post two'));
+
+   await contentBox.add(
+     PostContent(parentId: value.id, content: '${value.title} content one'),
+   );
+    await contentBox.add(
+     PostContent(parentId: value.id, content: '${value.title} content two'),
+   );
+   await contentBox.deleteById(28, willDeleteByParentRecord: true);
+
+
+  await contentBox.deleteAll();
+  await box.deleteAll();
+
+  for (var post in await box.getAll()) {
+    print('id: ${post.id} - title: ${post.title}');
+  }
+
+
+  for (var content in await contentBox.getAll()) {
+    print(
+      'id: ${content.id} - parentId: ${content.parentId} - Data: ${content.content}',
+    );
+  }
+
+  print('all record: ${await db.readAll()}');
+
+  print('lastIndex: ${db.lastIndex}');
+  print('deletedCount: ${db.deletedCount}');
+  print('deletedSize: ${db.deletedSize}');
+  print('Type: ${db.header}');
+
+</code></pre>
+<h3 id="opening-a-database">Opening a Database</h3>
+<pre class="language-dart"><code class="language-dart">final db = SMDB.getInstance();
+await db.open('path/to/my_database.db');
+</code></pre>
+<h2 id="registering-adapters">Registering Adapters</h2>
+<p>Before saving custom objects as JSON, you must register an adapter:
+Dart</p>
+<pre class="language-dart"><code class="language-dart">db.registerAdapterNotExists&lt;User&gt;(UserAdapter());
+</code></pre>
+<h2 id="working-with-files">Working with Files</h2>
+<p>You can add a file to the database and track the progress:
+Dart</p>
+<pre class="language-dart"><code class="language-dart">final record = FileRecord.fromPath('local_file.jpg');
+await db.addRecord(
+  record,
+  onProgressFile: (p) =&gt; print('Saving: $p'),
+);
+</code></pre>
+<h3 id="deleting-records">Deleting Records</h3>
+<p>Records are marked as deleted first. mabyCompact() is called internally to decide if a full cleanup is needed based on the deletedCount.
+Dart</p>
+<pre class="language-dart"><code class="language-dart">await db.removeRecord(myRecord);
+</code></pre>
+<h2 id="manual-compaction">Manual Compaction</h2>
+<p>To manually trigger a file cleanup and show progress to the user:
+Dart</p>
+<pre class="language-dart"><code class="language-dart">await db.compact(
+  onProgress: (p) =&gt; print('Compacting Database: $p'),
+);
+</code></pre>
+<h2 id="-architecture-detail-code-overview">🏗 Architecture Detail (Code Overview)</h2>
+<h3 id="database-header">Database Header</h3>
+<p>Every SMDB file starts with a header containing the DB Type and Version. Use readHeaderFromPath to inspect a file without loading the entire database.
+IndexedDB Layer</p>
+<h3 id="this-is-the-brain-of-the-system-it">This is the "Brain" of the system. It:</h3>
+<ul>
+<li>
+<p><strong>Loads Indexes</strong>: Reads the file and builds a list of allActiveRecordList in RAM.</p>
+</li>
+<li>
+<p><strong>Manages Offsets</strong>: Keeps track of exactly where each record starts in the physical file.</p>
+</li>
+<li>
+<p><strong>Monitors Health</strong>: Tracks deletedSize and deletedCount to determine when compaction is necessary.</p>
+</li>
+</ul>
+<h3 id="transferrecord-mechanism">transferRecord Mechanism</h3>
+<p>The compaction process uses a RandomAccessFile to RandomAccessFile transfer. It uses a 1MB Buffer to move data, ensuring the app doesn't crash even if you are moving gigabytes of data.</p>
+<h2 id="json-db-adapter">Json DB Adapter</h2>
+<pre class="language-dart"><code class="language-dart">class PostAdapter extends JsonDBAdapter&lt;Post&gt; {
+  @override
+  Post fromMap(Map&lt;String, dynamic&gt; map) {
+    return Post.fromJson(map);
+  }
+
+  @override
+  int get getUniqueFieldId =&gt; 1;
+
+  @override
+  int getId(Post value) {
+    return value.id;
+  }
+
+  @override
+  Map&lt;String, dynamic&gt; toMap(Post value) {
+    return value.toJson();
+  }
+}
+
+class PostContentAdapter extends JsonDBAdapter&lt;PostContent&gt; {
+  @override
+  PostContent fromMap(Map&lt;String, dynamic&gt; map) {
+    return PostContent.fromJson(map);
+  }
+
+  @override
+  int getId(PostContent value) {
+    return value.id;
+  }
+
+  @override
+  int get getUniqueFieldId =&gt; 2;
+
+  @override
+  Map&lt;String, dynamic&gt; toMap(PostContent value) {
+    return value.toJson();
+  }
+
+  @override
+  int getParentId(PostContent value) {
+    return value.parentId;
+  }
+}
+
+class Post {
+  final int id;
+  final String title;
+
+  const Post({this.id = 0, required this.title});
+
+  Map&lt;String, dynamic&gt; toJson() {
+    return {'id': id, 'title': title};
+  }
+
+  factory Post.fromJson(Map&lt;String, dynamic&gt; json) {
+    return Post(id: json['id'], title: json['title']);
+  }
+}
+
+class PostContent {
+  final int id;
+  final int parentId;
+  final String content;
+
+  const PostContent({
+    this.id = 0,
+    required this.parentId,
+    required this.content,
+  });
+
+  Map&lt;String, dynamic&gt; toJson() {
+    return {'id': id, 'parentId': parentId, 'content': content};
+  }
+
+  factory PostContent.fromJson(Map&lt;String, dynamic&gt; json) {
+    return PostContent(
+      id: json['id'],
+      parentId: json['parentId'],
+      content: json['content'],
+    );
+  }
+}
+</code></pre>
+<h2 id="cover">Cover</h2>
+<pre class="language-dart"><code class="language-dart">  await db.setCoverFormPath('/home/thancoder/Pictures/images.jpeg');
+  await db.setCoverFormPath('/home/thancoder/Pictures/green_way_logo.png');
+
+  final exported = await db.exportCoverFile('test.jpeg');
+  if (exported) {
+    print('exported Cover');
+  }
+</code></pre>
+<h2 id="files">Files</h2>
+<pre class="language-dart"><code class="language-dart">  await db.addFiles([
+    '/home/thancoder/projects/plugins/sm_db/CHANGELOG.md',
+    '/home/thancoder/projects/plugins/sm_db/test.jpeg',
+  ]);
+  await db.addFile(
+    '/home/thancoder/Videos/Supernatural S1/11.mp4',
+    onProgressFile: (progress) =&gt;
+        print('Progress: ${(progress * 100).toStringAsFixed(2)}%'),
+  );
+
+  final files = await db.readAllFiles();
+  print(files.last.info);
+
+  // Remove
+  await db.removeRecord(files.last);
+
+  // await files.last.extract(raf, outDir: outDir)
+  await db.extractFile(
+    files.last,
+    savePath: 'test.mp4',
+    onProgress: (progress) =&gt;
+        print('Progress: ${(progress * 100).toStringAsFixed(2)}%'),
+  );
+</code></pre>
+<pre class="language-dart"><code></code></pre>
+</section>
+
+
+      <section class="summary">
+          <h2>Libraries</h2>
+        <dl>
+          <dt id="sm_db">
+  <span class="name"><a href="sm_db/">sm_db</a></span> 
+
+</dt>
+<dd>Support for doing something awesome.
+</dd>
+
+        </dl>
+      </section>
+  </div> <!-- /.main-content -->
+  <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+<header id="header-search-sidebar" class="hidden-l">
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+    <li class="self-crumb">sm_db package</li>
+</ol>
+
+    <h5 class="hidden-xs"><span class="package-name">sm_db</span> <span class="package-kind">package</span></h5>
+    <ol>
+      <li class="section-title">Libraries</li>
+      <li><a href="sm_db/">sm_db</a></li>
+</ol>
+
+  </div>
+  <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
+  </div>
+</main>
+<footer>
+  <span class="no-break">
+    sm_db
+      0.1.0
+  </span>
+  
+</footer>
+
+
+<script src="static-assets/highlight.pack.js?v1"></script>
+<script src="static-assets/docs.dart.js"></script>
+
+</body>
+</html>
+

@@ -28,7 +28,7 @@ class SMDBConfig {
 
   factory SMDBConfig.empty() {
     return SMDBConfig(
-      autoCompact: false,
+      autoCompact: true,
       whenCompactAndCreateBkFile: true,
       saveLocalIndexLockFile: false,
       needToCompact: defaultCompackLogic,

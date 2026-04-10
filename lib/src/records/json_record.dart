@@ -7,14 +7,16 @@ import 'package:sm_db/src/records/db_records.dart';
 class JsonRecord extends DatabaseRecord {
   final int adapterTypeId;
   final int parentId;
-  final Uint8List jsonData;
+  int jsonSize;
+  Uint8List? jsonBytes;
   JsonRecord({
     super.type = RecordType.json,
     super.dataStartOffset,
     this.adapterTypeId = 0,
-    this.parentId = 0,
+    this.parentId = -1,
+    this.jsonSize = 0,
+    this.jsonBytes,
     required super.id,
-    required this.jsonData,
   });
 
   @override
@@ -25,18 +27,31 @@ class JsonRecord extends DatabaseRecord {
   ///
   @override
   Future<void> write(RandomAccessFile raf, {SMDBConfig? config}) async {
-    final jsonBytes = jsonData;
+    if (jsonBytes == null) throw Exception('jsonBytes required in JsonRecord');
+
     final header = ByteData(headerSize);
     header.setInt8(0, status.index);
     header.setInt8(1, type.index);
     header.setInt8(2, adapterTypeId);
     header.setInt64(3, id);
     header.setInt64(11, parentId);
-    header.setInt64(19, jsonBytes.length);
+    header.setInt64(19, jsonBytes!.length);
 
     // wirte
     await raf.writeFrom(header.buffer.asUint8List());
-    await raf.writeFrom(jsonBytes);
+    // set json data start offset
+    dataStartOffset = await raf.position();
+    // set json bytes length
+    jsonSize = jsonBytes!.length;
+
+    await raf.writeFrom(jsonBytes!);
+  }
+
+  Future<Uint8List?> getJsonData(RandomAccessFile raf) async {
+    if (dataStartOffset == -1) return null;
+    await raf.setPosition(dataStartOffset);
+    final jsonData = await raf.read(jsonSize);
+    return jsonData;
   }
 
   static Future<JsonRecord?> read(RandomAccessFile raf) async {
@@ -50,14 +65,26 @@ class JsonRecord extends DatabaseRecord {
     var dataStartOffset = -1;
 
     dataStartOffset = await raf.position();
+    // skip position
+    await raf.setPosition(dataStartOffset + jsonSize);
 
-    final jsonData = await raf.read(jsonSize);
+    // final jsonData = await raf.read(jsonSize);
     return JsonRecord(
       id: id,
-      jsonData: jsonData,
       parentId: parentId,
       adapterTypeId: adapterTypeId,
       dataStartOffset: dataStartOffset,
+      jsonSize: jsonSize,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'parentId': parentId,
+      'adapterTypeId': adapterTypeId,
+      'type': type.name,
+      'dataStartOffset': dataStartOffset,
+    };
   }
 }

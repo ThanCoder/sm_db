@@ -4,11 +4,11 @@ import 'dart:typed_data';
 import 'package:sm_db/src/records/db_records.dart';
 
 class CoverRecord extends DatabaseRecord {
-  final Uint8List? imageBytes;
-  final int? size;
+  Uint8List? imageBytes;
+  int size;
   CoverRecord({
     super.type = RecordType.cover,
-    super.dataStartOffset,
+    super.dataStartOffset = -1,
     this.size = 0,
     this.imageBytes,
     super.id = 0,
@@ -28,44 +28,47 @@ class CoverRecord extends DatabaseRecord {
   ///
   @override
   Future<void> write(RandomAccessFile raf) async {
+    if (imageBytes == null) throw Exception('imageBytes is null');
+
     final header = ByteData(headerSize);
     header.setInt8(0, status.index);
     header.setInt8(1, type.index);
     header.setInt64(2, imageBytes!.length);
     // write header
     await raf.writeFrom(header.buffer.asUint8List());
+    // set info
+    dataStartOffset = await raf.position();
+    size = imageBytes!.length;
+
     await raf.writeFrom(imageBytes!);
+    imageBytes = null; // Memory clean
   }
 
   Future<Uint8List?> getData(RandomAccessFile raf) async {
-    if (dataStartOffset == null || size == null) return null;
+    if (dataStartOffset == -1 || size == 0) return null;
 
     final current = await raf.position();
-    await raf.setPosition(dataStartOffset!);
-
-    final data = await raf.read(size!);
-
+    // set
+    await raf.setPosition(dataStartOffset);
+    final data = await raf.read(size);
     await raf.setPosition(current);
 
     return data;
   }
 
-  static Future<CoverRecord?> read(
-    RandomAccessFile raf,
-  ) async {
-    final current = await raf.position();
-    final meta = ByteData.sublistView(await raf.read(8));
-    final size = meta.getInt64(0);
-    final offset = await raf.position();
-    // skip
-    await raf.setPosition(offset + size);
+  static Future<CoverRecord?> read(RandomAccessFile raf) async {
+    // Status နဲ့ Type ကို အပြင်မှာ ဖတ်ပြီးသားမို့ Size (8 bytes) ကိုပဲ ဖတ်တော့မယ်
+    final sizeBytes = await raf.read(8);
+    if (sizeBytes.length < 8) return null;
 
-    // if (status == RecordStatus.delete) {
-    //   return null;
-    // }
-    await raf.setPosition(current);
+    final size = ByteData.sublistView(sizeBytes).getInt64(0);
+    final dataOffset = await raf.position();
 
-    return CoverRecord(size: size, dataStartOffset: offset);
+    // Data ကို ကျော်သွားမယ် (နောက် record ဖတ်လို့ရအောင်)
+    await raf.setPosition(dataOffset + size);
+
+    final record = CoverRecord(size: size, dataStartOffset: dataOffset);
+    return record;
   }
 
   CoverRecord copyWith({
