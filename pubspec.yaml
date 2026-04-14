@@ -1,6 +1,6 @@
 name: sm_db
 description: Small Database For Any Data Type.image Cover,Json Data,File Data with Meta.
-version: 0.1.0
+version: 0.2.1
 repository: https://github.com/ThanCoder/sm_db.git
 
 environment:

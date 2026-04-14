@@ -14,8 +14,9 @@ class JsonDBBox<T> {
   }) : _indexedDB = indexedDB,
        _adapter = adapter;
 
+  /// ### Add in `Box<T>`
   ///
-  /// ### Return (addedValue,record, isAdded)
+  /// Return T? `[addedValue]`
   ///
   /// `parentId ?? JsonDBAdapter.getParentId(T value)`
   ///
@@ -25,7 +26,7 @@ class JsonDBBox<T> {
   ///
   ///```
 
-  Future<(T value, JsonRecord, bool)> add(T value, {int? parentId}) async {
+  Future<T?> add(T value, {int? parentId}) async {
     final id = _indexedDB.generateNextId();
     final map = _adapter.toMap(value);
     map['id'] = id;
@@ -39,11 +40,11 @@ class JsonDBBox<T> {
       ),
     );
 
-    return (_adapter.fromMap(map), record as JsonRecord, bool);
+    return bool ? _adapter.fromMap(map) : null;
   }
 
   ///
-  /// ### Remove Record
+  /// ### Remove Record  in `Box<T>`
   ///
   Future<bool> deleteById(
     int id, {
@@ -98,7 +99,7 @@ class JsonDBBox<T> {
   }
 
   ///
-  /// ### Delete All `Box<T>`
+  /// ### Delete All in `Box<T>`
   ///
   Future<bool> deleteAll() async {
     final list = <JsonRecord>[];
@@ -113,7 +114,7 @@ class JsonDBBox<T> {
   }
 
   ///
-  /// ### Get By Id
+  /// ### Get By Id in `Box<T>`
   ///
   Future<T?> getById(int id) async {
     final res = await _indexedDB.db.getById(id);
@@ -127,7 +128,37 @@ class JsonDBBox<T> {
   }
 
   ///
-  /// ### Get By Parent Id
+  /// ### Update By Id in `Box<T>`
+  ///
+  /// Return `newValue`
+  ///
+  Future<T?> updateById(int id, {required T value}) async {
+    final addedValue = await getById(id);
+    if (addedValue != null) {
+      // delete
+      await deleteById(_adapter.getId(addedValue));
+    }
+    //update
+    return await add(value);
+  }
+
+  ///
+  /// ### Update One in `Box<T>`
+  ///
+  /// Return `newValue`
+  ///
+  Future<T?> updateOne(bool Function(T value) test, {required T value}) async {
+    final addedValue = await getOne(test);
+    if (addedValue != null) {
+      // delete
+      await deleteById(_adapter.getId(addedValue));
+    }
+    //update
+    return await add(value);
+  }
+
+  ///
+  /// ### Get By Parent Id in `Box<T>`
   ///
   Future<T?> getByParentId(int parentId) async {
     for (var record in _indexedDB.allActiveRecordList) {
@@ -145,6 +176,30 @@ class JsonDBBox<T> {
     return null;
   }
 
+  ///
+  /// ### Get List By Parent Id in `Box<T>`
+  ///
+  Future<List<T>> getListByParentId(int parentId) async {
+    List<T> results = [];
+    for (var record in _indexedDB.allActiveRecordList) {
+      if (record.type != RecordType.json) continue;
+      final jsonRec = (record as JsonRecord);
+      if (jsonRec.parentId == parentId) {
+        // read json data
+        final raf = await _indexedDB.dbFile.open();
+        final data = await jsonRec.getJsonData(raf);
+        await raf.close();
+        if (data == null) continue;
+        final value = _adapter.fromMap(_adapter.decodeData(data));
+        results.add(value);
+      }
+    }
+    return results;
+  }
+
+  ///
+  /// ### Get All in `Box<T>`
+  ///
   Future<List<T>> getAll({int? parentId}) async {
     final res = await _indexedDB.db.readAll();
     // print('box list: $res');
@@ -174,6 +229,9 @@ class JsonDBBox<T> {
     return list;
   }
 
+  ///
+  /// ### Get All With Stream in `Box<T>`
+  ///
   Stream<T> getAllStream({int? parentId}) async* {
     final res = await _indexedDB.db.readAll();
     for (var record in res) {
@@ -197,5 +255,29 @@ class JsonDBBox<T> {
       // await Future.delayed(Duration(seconds: 1));
       yield value;
     }
+  }
+
+  ///
+  /// ### Get One in `Box<T>`
+  ///
+  Future<T?> getOne(bool Function(T value) test, {int? parentId}) async {
+    final list = await getAll(parentId: parentId);
+    final index = list.indexWhere(test);
+    if (index == -1) return null;
+    return list[index];
+  }
+
+  ///
+  /// ### Get One With Stream in `Box<T>`
+  ///
+  Stream<T?> getOneStream(bool Function(T value) test, {int? parentId}) async* {
+    final stream = getAllStream(parentId: parentId);
+    await for (var value in stream) {
+      if (test(value)) {
+        yield value;
+        return;
+      }
+    }
+    yield null;
   }
 }
