@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:sm_db/sm_db.dart';
 import 'package:sm_db/src/events/db_events.dart';
-import 'package:sm_db/src/indexed/smdb_config.dart';
 import 'package:sm_db/src/records/cover_record.dart';
 import 'package:sm_db/src/records/db_records.dart';
 import 'package:sm_db/src/records/file_record.dart';

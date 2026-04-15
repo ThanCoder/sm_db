@@ -21,6 +21,7 @@ class SMDB {
 
   late String path;
   late IndexedDB _indexedDB;
+  bool _isInitializing = false;
   final EventBus eventBus = EventBus();
   // adapter
   final Map<Type, JsonDBAdapter> _adapters = {};
@@ -41,6 +42,7 @@ class SMDB {
     );
 
     await _indexedDB.loadIndexed();
+    _isInitializing = true;
   }
 
   ///
@@ -49,6 +51,9 @@ class SMDB {
   /// Usage `db.registerAdapterNotExists<User>(UserAdapter());`
   ///
   void registerAdapterNotExists<T>(JsonDBAdapter<T> adapter) {
+    if (!isOpened) {
+      throw Exception('Need To Open Database \nYou Should Call -> `SMDB.open()`');
+    }
     if (_adapters.containsKey(T)) return;
     final ids = _adapters.values.map((e) => e.getUniqueFieldId);
     if (ids.contains(adapter.getUniqueFieldId)) {
@@ -95,20 +100,18 @@ class SMDB {
   /// ## Database Is Opened
   ///
   bool get isOpened {
-    try {
-      path;
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _isInitializing;
   }
 
   ///
   /// ### Close Database
   ///
   /// No Working For Now
-  /// 
-  Future<void> close() async {}
+  ///
+  Future<void> close() async {
+    _isInitializing = false;
+    clearAllAdapter();
+  }
 
   ///
   /// ### CoverRecord `[Uint8List]` data

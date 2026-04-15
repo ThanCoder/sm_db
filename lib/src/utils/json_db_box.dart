@@ -132,14 +132,22 @@ class JsonDBBox<T> {
   ///
   /// Return `newValue`
   ///
-  Future<T?> updateById(int id, {required T value}) async {
+  Future<bool> updateById(int id, {required T value}) async {
     final addedValue = await getById(id);
     if (addedValue != null) {
       // delete
       await deleteById(_adapter.getId(addedValue));
     }
-    //update
-    return await add(value);
+    // update
+    final (_, result) = await _indexedDB.db.addRecord(
+      JsonRecord(
+        id: id,
+        jsonBytes: _adapter.encodeData(_adapter.toMap(value)),
+        adapterTypeId: _adapter.getUniqueFieldId,
+        parentId: _adapter.getParentId(value),
+      ),
+    );
+    return result;
   }
 
   ///

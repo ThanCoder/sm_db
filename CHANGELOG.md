@@ -1,4 +1,8 @@
-# 0.2.1
+# 0.2.2
+
+- Fixed `Some Errors`
+
+## 0.2.1
 
 - Added `getListByParentId` in `Box<T>` - **_ Very Fast _**
 - Added `updateById` in `Box<T>`
