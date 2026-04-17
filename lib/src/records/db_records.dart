@@ -1,56 +1,60 @@
 // ignore_for_file: unused_field
 import 'dart:io';
 
-import 'package:sm_db/src/events/sm_db_events_listener.dart';
-
 enum RecordType { cover, json, file }
 
 enum RecordStatus { delete, active }
 
+///  Header (10 bytes): [Status(1),Type(1),Size(8)]
+const int coverHeaderSize = 10;
+
+/// Header (27 bytes): [Status(1)][Type(1)][AdapterTypeId(1)][ID(8)][ParentID(8)][JsonDataSize(8)]
+const int jsonHeaderSize = 27;
+
+/// Header (26 bytes): [Status(1),Type(1),ID(8),InfoSize(8),FileSize(8)]
+const int fileHeaderSize = 26;
+
 abstract class DatabaseRecord {
-  int id;
+  final int id;
+  final int offset;
   final RecordType type;
-  RecordStatus status;
-  int dataStartOffset;
-  DatabaseRecord({
-    this.id = 0,
+
+  const DatabaseRecord({
+    required this.offset,
+    this.id = -1,
     required this.type,
-    this.status = RecordStatus.active,
-    this.dataStartOffset = -1,
   });
 
   //NEED TO OVERRIDE
+  ///
+  /// ### Need To Return Start Header `Offset`
+  ///
+  Future<int> write(RandomAccessFile raf);
+  int getTotalRecordSize();
+  int getDataSize();
+  int getInfoSize() => 0;
+  int getAdapterTypeId() => -1;
+  int getParentId() => -1;
   int get headerSize;
-  Future<void> write(RandomAccessFile raf);
 
   ///
   /// ### Delete Mark Database Record
   ///
-  Future<RecordStatus> deleteAsMark(RandomAccessFile raf) async {
-    if (dataStartOffset == -1) {
-      SmDbEventsListener.instance.add(
-        DBRecordDeleteAsMarkError(message: 'dataStartOffset is -1'),
-      );
-      // Offset မရှိရင် လက်ရှိ status အတိုင်းပဲ ပြန်ပို့မယ်
-      return status;
-    }
+  Future<bool> deleteAsMark(RandomAccessFile raf) async {
+    if (offset == -1) return false;
 
     final current = await raf.position();
 
     // 1. Header နေရာသို့ သွား၍ Status ကို Update လုပ်မည်
-    await raf.setPosition(dataStartOffset - headerSize);
-
-    // 2. Status ကို Delete အဖြစ် ပြောင်းလဲသတ်မှတ်မည်
-    status = RecordStatus.delete;
+    await raf.setPosition(offset - headerSize);
 
     // 3. File ထဲသို့ Status Index ကို ရေးမည်
-    await raf.writeByte(status.index);
+    await raf.writeByte(RecordStatus.delete.index);
 
     // 4. မူလ Position သို့ ပြန်သွားမည်
     await raf.setPosition(current);
 
-    // 5. ပြောင်းလဲသွားသော Status ကို Return ပြန်ပေးမည်
-    return status;
+    return true;
   }
 
   Future<void> transferRecord({

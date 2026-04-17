@@ -20,22 +20,28 @@ class SMDB {
   }
 
   late String path;
-  late IndexedDB _indexedDB;
+  final IndexedDB _indexedDB = IndexedDB();
   bool _isInitializing = false;
   final EventBus eventBus = EventBus();
   // adapter
-  final Map<Type, JsonDBAdapter> _adapters = {};
+  final Map<Type, SMDBJsonAdapter> _adapters = {};
   final Map<Type, JsonDBBox> _boxs = {};
 
   ///
   /// ### Database Open
   ///
-  Future<void> open(String dbPath, {SMDBConfig? config}) async {
-    if (isOpened) {
-      await close();
+  Future<void> open(
+    String dbPath, {
+    SMDBConfig? config,
+    bool databaseIfOpenWillCloseReOpen = false,
+  }) async {
+    if (isOpened && databaseIfOpenWillCloseReOpen) {
+      await close(isClearAllAdapter: true);
     }
+    if (isOpened && !databaseIfOpenWillCloseReOpen) return;
+
     path = dbPath;
-    _indexedDB = IndexedDB(
+    _indexedDB.setConfig(
       db: this,
       dbFile: File(path),
       config: config ?? SMDBConfig.empty(),
@@ -50,10 +56,7 @@ class SMDB {
   ///
   /// Usage `db.registerAdapterNotExists<User>(UserAdapter());`
   ///
-  void registerAdapterNotExists<T>(JsonDBAdapter<T> adapter) {
-    if (!isOpened) {
-      throw Exception('Need To Open Database \nYou Should Call -> `SMDB.open()`');
-    }
+  void registerAdapterNotExists<T>(SMDBJsonAdapter<T> adapter) {
     if (_adapters.containsKey(T)) return;
     final ids = _adapters.values.map((e) => e.getUniqueFieldId);
     if (ids.contains(adapter.getUniqueFieldId)) {
@@ -69,7 +72,7 @@ class SMDB {
   }
 
   ///
-  /// ### All Registered Adapter Clear
+  /// ### Clear All Registered Adapter
   ///
   void clearAllAdapter() {
     _adapters.clear();
@@ -79,11 +82,11 @@ class SMDB {
   ///
   /// ### Get Adapter`<T>`
   ///
-  JsonDBAdapter<T> getAdapter<T>() {
+  SMDBJsonAdapter<T> getAdapter<T>() {
     if (_adapters[T] == null) {
       throw Exception('No Adapter Registerd for type `$T`');
     }
-    return _adapters[T] as JsonDBAdapter<T>;
+    return _adapters[T] as SMDBJsonAdapter<T>;
   }
 
   ///
@@ -108,9 +111,11 @@ class SMDB {
   ///
   /// No Working For Now
   ///
-  Future<void> close() async {
+  Future<void> close({bool isClearAllAdapter = true}) async {
     _isInitializing = false;
-    clearAllAdapter();
+    if (isClearAllAdapter) {
+      clearAllAdapter();
+    }
   }
 
   ///
@@ -118,6 +123,18 @@ class SMDB {
   ///
   Future<Uint8List?> getCoverData() async {
     return await _indexedDB.getCoverData();
+  }
+
+  ///
+  /// ### Cover Data `[Uint8List]`
+  ///
+  Future<Uint8List?> readCoverDataInDatabase() async {
+    final res = await _indexedDB.readCoverRecordInDatabase();
+    if (res == null) return null;
+    final raf = await File(path).open();
+    final data = await res.getData(raf);
+    await raf.close();
+    return data;
   }
 
   ///
@@ -161,9 +178,9 @@ class SMDB {
   }
 
   ///
-  /// ### Read All `Active` Records
+  /// ### Read All `Active JsonRecords`
   ///
-  Future<List<DatabaseRecord>> readAll() async {
+  Future<List<JsonRecord>> readAll() async {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
     return _indexedDB.allActiveRecordList;
   }
@@ -179,31 +196,33 @@ class SMDB {
   }
 
   ///
-  /// ### Read All `Active File` Records
+  /// ### Read All `Active FileRecords`
   ///
-  Future<List<FileRecord>> readAllFiles() async {
+  Future<List<FileRecord>> readAllFileRecordsInDatabase() async {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
-    List<FileRecord> list = [];
-
-    for (var rec in _indexedDB.allActiveRecordList) {
-      if (rec.type != RecordType.file) continue;
-      list.add(rec as FileRecord);
-    }
-    return list;
+    return await _indexedDB.readAllFileRecordsInDatabase();
   }
 
   ///
-  /// ### Read All `Active Json` Records
+  /// ### Read All `Active JsonRecords`
   ///
-  Future<List<JsonRecord>> readAllJson() async {
+  Future<List<JsonRecord>> readAllJsonRecordsInDatabase() async {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
-    List<JsonRecord> list = [];
+    return await _indexedDB.readAllJsonRecordsInDatabase();
+  }
 
-    for (var rec in _indexedDB.allActiveRecordList) {
-      if (rec.type != RecordType.json) continue;
-      list.add(rec as JsonRecord);
-    }
-    return list;
+  ///
+  /// ### Read All `Active Records` List
+  ///
+  Future<List<DatabaseRecord>> readAllActiveRecordsInDatabase() async {
+    return await _indexedDB.readAllActiveRecordsInDatabase();
+  }
+
+  ///
+  /// ### Read All `Deleted Records` List
+  ///
+  Future<List<DatabaseRecord>> readAllDeletedRecordsInDatabase() async {
+    return await _indexedDB.readAllDeletedRecordsInDatabase();
   }
 
   ///
@@ -217,7 +236,7 @@ class SMDB {
     if (!isOpened) throw Exception('You Should Call -> SMDB.open()');
     final raf = await File(path).open();
 
-    for (var file in await readAllFiles()) {
+    for (var file in await readAllFileRecordsInDatabase()) {
       final savePath = '${outDir.path}${Platform.pathSeparator}${file.name}';
       await file.extract(
         raf,
@@ -254,7 +273,7 @@ class SMDB {
   /// ### Delete All File
   ///
   Future<void> deleteAllFiles() async {
-    for (var file in await readAllFiles()) {
+    for (var file in await readAllFileRecordsInDatabase()) {
       await removeRecord(file, isCallMabyCompact: false);
     }
     await _indexedDB.mabyCompact();
@@ -264,7 +283,7 @@ class SMDB {
   /// ### Delete All Json Records
   ///
   Future<void> deleteAllJsonRecords() async {
-    for (var rc in await readAllJson()) {
+    for (var rc in await readAll()) {
       await removeRecord(rc, isCallMabyCompact: false);
     }
     await _indexedDB.mabyCompact();
@@ -275,11 +294,11 @@ class SMDB {
   ///
   /// Return-> `(record, result)`
   ///
-  ///  `parentId ?? JsonDBAdapter.getParentId(T value)`
+  ///  `parentId ?? SMDBJsonAdapter.getParentId(T value)`
   ///
   /// ```dart
   /// /// For JsonRecord
-  /// abstract class JsonDBAdapter<T>
+  /// abstract class SMDBJsonAdapter<T>
   ///   int getParentId(T value) => -1; <--- Need To Override
   ///
   ///```

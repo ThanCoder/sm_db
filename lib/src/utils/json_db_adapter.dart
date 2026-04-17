@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:sm_db/src/indexed/smdb_compressor.dart';
 
-abstract class JsonDBAdapter<T> {
+abstract class SMDBJsonAdapter<T> {
   int get getUniqueFieldId;
   int getParentId(T value) => -1;
   int getId(T value);

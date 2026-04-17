@@ -4,13 +4,25 @@ import 'package:sm_db/sm_db.dart';
 
 void main() async {
   final db = SMDB.getInstance();
-  await db.open('test.db');
 
   db.registerAdapterNotExists<Post>(PostAdapter());
   db.registerAdapterNotExists<PostContent>(PostContentAdapter());
 
-  final files = await db.readAllFiles();
-  await db.mabyCompact();
+  await db.open('test.db');
+
+  final box = db.getBox<Post>();
+  // await box.add(Post(title: 'post two'));
+  // await box.add(Post(title: 'post three'));
+  // await box.deleteById(1);
+  // await box.deleteById(2);
+  // await box.deleteById(1);
+
+  for (var post in await box.getAll()) {
+    print('id: ${post.id} - title: ${post.title}');
+  }
+
+  // final files = await db.readAllFileRecordsInDatabase();
+  // await db.mabyCompact();
 
   // await db.removeRecord(files.first);
 
@@ -41,7 +53,7 @@ void main() async {
   print('Type: ${db.header}');
 }
 
-class PostAdapter extends JsonDBAdapter<Post> {
+class PostAdapter extends SMDBJsonAdapter<Post> {
   @override
   Post fromMap(Map<String, dynamic> map) {
     return Post.fromJson(map);
@@ -61,7 +73,7 @@ class PostAdapter extends JsonDBAdapter<Post> {
   }
 }
 
-class PostContentAdapter extends JsonDBAdapter<PostContent> {
+class PostContentAdapter extends SMDBJsonAdapter<PostContent> {
   @override
   PostContent fromMap(Map<String, dynamic> map) {
     return PostContent.fromJson(map);

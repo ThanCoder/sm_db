@@ -7,6 +7,10 @@ bool defaultCompackLogic(int deletedCount, int deletedSize) =>
 class SMDBConfig {
   final bool autoCompact;
   final bool whenCompactAndCreateBkFile;
+
+  ///
+  /// ### Current Not Working!!!
+  ///
   final bool saveLocalIndexLockFile;
 
   ///

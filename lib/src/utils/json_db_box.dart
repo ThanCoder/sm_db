@@ -6,11 +6,11 @@ import 'package:sm_db/src/utils/json_db_adapter.dart';
 
 class JsonDBBox<T> {
   final IndexedDB _indexedDB;
-  final JsonDBAdapter<T> _adapter;
+  final SMDBJsonAdapter<T> _adapter;
 
   const JsonDBBox({
     required IndexedDB indexedDB,
-    required JsonDBAdapter<T> adapter,
+    required SMDBJsonAdapter<T> adapter,
   }) : _indexedDB = indexedDB,
        _adapter = adapter;
 
@@ -18,10 +18,10 @@ class JsonDBBox<T> {
   ///
   /// Return T? `[addedValue]`
   ///
-  /// `parentId ?? JsonDBAdapter.getParentId(T value)`
+  /// `parentId ?? SMDBJsonAdapter.getParentId(T value)`
   ///
   /// ```dart
-  /// abstract class JsonDBAdapter<T>
+  /// abstract class SMDBJsonAdapter<T>
   ///   int getParentId(T value) => -1; <--- Need To Override
   ///
   ///```
@@ -56,7 +56,7 @@ class JsonDBBox<T> {
     for (var rec in _indexedDB.allActiveRecordList.toList()) {
       if (rec.type != RecordType.json) continue;
       // filter current box type
-      final jRec = rec as JsonRecord;
+      final jRec = rec;
       if (jRec.adapterTypeId != _adapter.getUniqueFieldId) continue;
       boxList.add(jRec);
     }
@@ -78,7 +78,7 @@ class JsonDBBox<T> {
       for (var parent in _indexedDB.allActiveRecordList.toList()) {
         if (parent.type != RecordType.json ||
             parent.id == -1 ||
-            (parent as JsonRecord).id != record.parentId) {
+            (parent).id != record.parentId) {
           continue;
         }
         await _indexedDB.db.removeRecord(parent, isCallMabyCompact: false);
@@ -89,7 +89,7 @@ class JsonDBBox<T> {
       for (var child in _indexedDB.allActiveRecordList.toList()) {
         if (child.type != RecordType.json ||
             child.id == -1 ||
-            (child as JsonRecord).parentId != record.id) {
+            (child).parentId != record.id) {
           continue;
         }
         await _indexedDB.db.removeRecord(child, isCallMabyCompact: false);
@@ -105,7 +105,7 @@ class JsonDBBox<T> {
     final list = <JsonRecord>[];
     for (var rec in _indexedDB.allActiveRecordList) {
       if (rec.type != RecordType.json) continue;
-      final jRec = rec as JsonRecord;
+      final jRec = rec;
       // filter field id
       if (jRec.adapterTypeId != _adapter.getUniqueFieldId) continue;
       list.add(jRec);
@@ -171,7 +171,7 @@ class JsonDBBox<T> {
   Future<T?> getByParentId(int parentId) async {
     for (var record in _indexedDB.allActiveRecordList) {
       if (record.type != RecordType.json) continue;
-      final jsonRec = (record as JsonRecord);
+      final jsonRec = (record);
       if (jsonRec.parentId == parentId) {
         // read json data
         final raf = await _indexedDB.dbFile.open();
@@ -191,7 +191,7 @@ class JsonDBBox<T> {
     List<T> results = [];
     for (var record in _indexedDB.allActiveRecordList) {
       if (record.type != RecordType.json) continue;
-      final jsonRec = (record as JsonRecord);
+      final jsonRec = (record);
       if (jsonRec.parentId == parentId) {
         // read json data
         final raf = await _indexedDB.dbFile.open();
@@ -213,22 +213,16 @@ class JsonDBBox<T> {
     // print('box list: $res');
     List<T> list = [];
     for (var record in res) {
-      // json ပဲရယူမယ်
-      if (record.status == RecordStatus.delete ||
-          record.type != RecordType.json) {
-        continue;
-      }
-      final jsr = record as JsonRecord;
-      // print(jsr.toJson());
-
-      if (jsr.adapterTypeId != _adapter.getUniqueFieldId) continue;
+      if (record.adapterTypeId != _adapter.getUniqueFieldId) continue;
       // filter parent Id
-      if (parentId != null && jsr.parentId != -1 && jsr.parentId != parentId) {
+      if (parentId != null &&
+          record.parentId != -1 &&
+          record.parentId != parentId) {
         continue;
       }
       // read json data
       final raf = await _indexedDB.dbFile.open();
-      final data = await jsr.getJsonData(raf);
+      final data = await record.getJsonData(raf);
       await raf.close();
       if (data == null) continue;
       //add
@@ -248,7 +242,7 @@ class JsonDBBox<T> {
           record.type != RecordType.json) {
         continue;
       }
-      final jsr = record as JsonRecord;
+      final jsr = record;
       if (jsr.adapterTypeId != _adapter.getUniqueFieldId) continue;
       // filter parent Id
       if (parentId != null && jsr.parentId != parentId) continue;
