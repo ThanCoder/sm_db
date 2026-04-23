@@ -55,8 +55,8 @@ class JsonRecord extends DatabaseRecord {
     return startOffset;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf, int offset) async {
-    final headerOffset = offset - 2; //status,type
+  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
+    final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(jsonHeaderSize - 2));
 
     final adapterTypeId = data.getInt1Byte(0);
@@ -64,6 +64,10 @@ class JsonRecord extends DatabaseRecord {
     final parentId = data.getInt8Bytes(9);
     final jsonSize = data.getInt8Bytes(17);
     final recordTotalSize = jsonHeaderSize + jsonSize;
+
+    //ခုန်ကျော်မယ်
+    final endPos = await raf.position();
+    await raf.setPosition(endPos + jsonSize);
 
     return RecordMeta(
       type: RecordType.json,

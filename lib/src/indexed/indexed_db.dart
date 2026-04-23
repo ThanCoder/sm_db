@@ -11,14 +11,12 @@ import 'package:sm_db/src/records/json_record.dart';
 class IndexedDB {
   late File dbFile;
   late SMDBConfig config;
-  late SMDB db;
 
   void setConfig({
     required SMDB db,
     required File dbFile,
     required SMDBConfig config,
   }) {
-    this.db = db;
     this.config = config;
     this.dbFile = dbFile;
     // _onEventListener();
@@ -26,15 +24,13 @@ class IndexedDB {
 
   int _lastIndex = 0;
   CoverRecord? _coverRecord;
-  final List<RecordMeta> _allActiveRecordList = [];
+  final List<RecordMeta> _allRecordList = [];
   int _deletedCount = 0;
   int _deletedSized = 0;
   (String, int)? _header;
-  File get _lockFile => File('${dbFile.path}.lock');
 
   (String, int)? get header => _header;
-
-  List<RecordMeta> get allActiveRecordList => _allActiveRecordList;
+  List<RecordMeta> get allRecordList => _allRecordList;
 
   // getter
   int get lastIndex => _lastIndex;
@@ -44,91 +40,13 @@ class IndexedDB {
     return _lastIndex;
   }
 
-  Future<void> removeRecordToRAM(
-    DatabaseRecord record, {
-    bool isCallMabyCompact = true,
-  }) async {
-    final index = _allActiveRecordList.indexWhere(
-      (e) => e.id != -1 && e.id == record.id,
-    );
-    if (index == -1) return;
-    if (record is CoverRecord) {
-      _coverRecord = null;
-    }
-    _allActiveRecordList.removeAt(index);
-
-    _deletedCount++;
-    _deletedSized += record.getTotalRecordSize();
-    if (isCallMabyCompact) {
-      await mabyCompact();
-    }
-  }
-
-  Future<void> addRecordToRAM(DatabaseRecord record) async {
-    if (record.type != RecordType.json) return;
-    _allActiveRecordList.add(
-      RecordMeta(
-        id: record.id,
-        adapterTypeId: record.getAdapterTypeId(),
-        parentId: record.getParentId(),
-        type: record.type,
-        offset: record.offset,
-        recordTotalSize: record.getTotalRecordSize(),
-        dataSize: record.getDataSize(),
-        fileInfoSize: record.getInfoSize(),
-      ),
-    );
-    // print('Added to RAM: ${_allActiveRecordList.length}');
-  }
-
   Future<void> loadIndexed() async {
     if (!dbFile.existsSync()) {
       final raf = await File(dbFile.path).open(mode: FileMode.append);
       await writeHeader(raf);
       await raf.close();
     }
-    if (_lockFile.existsSync()) {
-    } else {
-      await _loadDatabase();
-    }
-  }
-
-  Future<void> _loadDatabase() async {
-    final raf = await File(dbFile.path).open();
-    final total = await raf.length();
-    // read header
-    _header = await readHeader(
-      raf,
-      type: config.dbType,
-      version: config.dbVersion,
-    );
-    _allActiveRecordList.clear();
-    _deletedCount = 0;
-    _deletedSized = 0;
-
-    while (await raf.position() < total) {
-      final statusByte = await raf.readByte();
-      if (statusByte == -1) break; // End of file
-
-      final status = RecordStatus.values[statusByte];
-      final type = RecordType.values[await raf.readByte()];
-
-      final position = await raf.position();
-
-      final meta = await RecordMeta.read(raf, position, type);
-      if (status == RecordStatus.active) {
-        if (type == RecordType.json) {
-          _allActiveRecordList.add(meta);
-          _lastIndex = meta.id > _lastIndex ? meta.id : _lastIndex;
-        }
-      } else {
-        _deletedCount++;
-        _deletedSized += meta.dataSize;
-        await raf.setPosition(position + meta.recordTotalSize);
-      }
-    }
-
-    await raf.close();
+    await _buildIndexInDatabase();
   }
 
   Future<void> writeHeader(RandomAccessFile raf) async {
@@ -166,256 +84,35 @@ class IndexedDB {
     return (type, version);
   }
 
-  ///
-  /// ### Read Header
-  ///
-  /// Return `(type, version)`
-  ///
-  // Future<(String, int)> _readHeader() async {
-  //   final raf = await dbFile.open();
-  //   final res = await readHeader(
-  //     raf,
-  //     type: config.dbType,
-  //     version: config.dbVersion,
-  //   );
-  //   await raf.close();
-  //   return res;
-  // }
+  Future<void> _buildIndexInDatabase() async {
+    _allRecordList.clear();
+    _deletedCount = 0;
+    _deletedSized = 0;
 
-  ///
-  /// ### Read All JsonRecords In Database
-  ///
-  // Future<List<JsonRecord>> readAllJsonRecordsInDatabase() async {
-  //   final activeList = <JsonRecord>[];
-
-  //   final raf = await File(dbFile.path).open();
-  //   final total = await raf.length();
-  //   // read header
-  //   await readHeader(raf, type: config.dbType, version: config.dbVersion);
-
-  //   while (await raf.position() < total) {
-  //     final statusByte = await raf.readByte();
-  //     if (statusByte == -1) break; // End of file
-
-  //     final status = RecordStatus.values[statusByte];
-  //     final type = RecordType.values[await raf.readByte()];
-
-  //     DatabaseRecord? record;
-  //     // print(type);
-  //     switch (type) {
-  //       case RecordType.cover:
-  //         record = await CoverRecord.read(raf);
-  //         break;
-  //       case RecordType.json:
-  //         record = await JsonRecord.read(raf);
-  //         break;
-  //       case RecordType.file:
-  //         // print(record);
-  //         record = await FileRecord.read(raf);
-  //         break;
-  //     }
-
-  //     if (record == null || status != RecordStatus.active) continue;
-  //     if (record.type != RecordType.json) continue;
-  //     activeList.add(record as JsonRecord);
-  //   }
-
-  //   await raf.close();
-  //   return activeList;
-  // }
-
-  ///
-  /// ### Read All FileRecord In Database
-  ///
-  Future<List<FileRecord>> readAllFileRecordsInDatabase() async {
-    final activeList = <FileRecord>[];
-
-    final raf = await File(dbFile.path).open();
-    final total = await raf.length();
+    final raf = await dbFile.open();
+    if (!dbFile.existsSync()) return;
+    final size = dbFile.lengthSync();
     // read header
     await readHeader(raf, type: config.dbType, version: config.dbVersion);
 
-    while (await raf.position() < total) {
-      final statusByte = await raf.readByte();
-      if (statusByte == -1) break; // End of file
-
-      final status = RecordStatus.values[statusByte];
+    while (await raf.position() < size) {
+      final statusIndex = await raf.readByte();
+      if (statusIndex == -1) {
+        throw Exception('Status Not Found / End of File!');
+      }
+      final status = RecordStatus.values[statusIndex];
       final type = RecordType.values[await raf.readByte()];
 
-      DatabaseRecord? record;
-      // print(type);
-      switch (type) {
-        case RecordType.cover:
-          record = await CoverRecord.read(raf);
-          break;
-        case RecordType.json:
-          record = await JsonRecord.read(raf);
-          break;
-        case RecordType.file:
-          // print(record);
-          record = await FileRecord.read(raf);
-          break;
-      }
-
-      if (record == null || status != RecordStatus.active) continue;
-      if (record.type != RecordType.file) continue;
-      activeList.add(record as FileRecord);
-    }
-
-    await raf.close();
-    return activeList;
-  }
-
-  ///
-  /// ## Read All `Active` Records
-  /// Return -> `(activeList, removeList)`
-  ///
-  Future<(List<DatabaseRecord>, List<DatabaseRecord>)>
-  readAllRecordsInDatabase() async {
-    final activeList = <DatabaseRecord>[];
-    final removeList = <DatabaseRecord>[];
-
-    final raf = await File(dbFile.path).open();
-    final total = await raf.length();
-    // read header
-    await readHeader(raf, type: config.dbType, version: config.dbVersion);
-
-    while (await raf.position() < total) {
-      final statusByte = await raf.readByte();
-      if (statusByte == -1) break; // End of file
-
-      final status = RecordStatus.values[statusByte];
-      final type = RecordType.values[await raf.readByte()];
-
-      DatabaseRecord? record;
-      // print(type);
-      switch (type) {
-        case RecordType.cover:
-          record = await CoverRecord.read(raf);
-          if (record != null && record.status == RecordStatus.active) {
-            _coverRecord = (record as CoverRecord);
-          }
-          break;
-        case RecordType.json:
-          record = await JsonRecord.read(raf);
-          // print((record as JsonRecord).data);
-          break;
-        case RecordType.file:
-          // print(record);
-          record = await FileRecord.read(raf);
-          break;
-      }
-
-      if (record == null) continue;
+      final meta = await RecordMeta.read(raf, type);
       if (status == RecordStatus.active) {
-        activeList.add(record);
+        _allRecordList.add(meta);
       } else {
-        removeList.add(record);
+        //delete
+        _deletedCount++;
+        _deletedSized += meta.recordTotalSize;
       }
-    }
-
-    await raf.close();
-    return (activeList, removeList);
-  }
-
-  ///
-  /// ### Read All `Active Records` List
-  ///
-  Future<List<DatabaseRecord>> readAllActiveRecordsInDatabase() async {
-    final activeList = <DatabaseRecord>[];
-
-    final raf = await File(dbFile.path).open();
-    final total = await raf.length();
-    // read header
-    await readHeader(raf, type: config.dbType, version: config.dbVersion);
-
-    while (await raf.position() < total) {
-      final statusByte = await raf.readByte();
-      if (statusByte == -1) break; // End of file
-
-      final status = RecordStatus.values[statusByte];
-      final type = RecordType.values[await raf.readByte()];
-
-      DatabaseRecord? record;
-      // print(type);
-      switch (type) {
-        case RecordType.cover:
-          record = await CoverRecord.read(raf);
-          if (record != null && record.status == RecordStatus.active) {
-            _coverRecord = (record as CoverRecord);
-          }
-          break;
-        case RecordType.json:
-          record = await JsonRecord.read(raf);
-          // print((record as JsonRecord).data);
-          break;
-        case RecordType.file:
-          // print(record);
-          record = await FileRecord.read(raf);
-          break;
-      }
-
-      if (record == null) continue;
-      if (status != RecordStatus.active) continue;
-      activeList.add(record);
-    }
-
-    await raf.close();
-    return activeList;
-  }
-
-  ///
-  /// ### Read All `Deleted Records` List
-  ///
-  Future<List<DatabaseRecord>> readAllDeletedRecordsInDatabase() async {
-    final list = <DatabaseRecord>[];
-
-    final raf = await File(dbFile.path).open();
-    final total = await raf.length();
-    // read header
-    await readHeader(raf, type: config.dbType, version: config.dbVersion);
-
-    while (await raf.position() < total) {
-      final statusByte = await raf.readByte();
-      if (statusByte == -1) break; // End of file
-
-      final status = RecordStatus.values[statusByte];
-      final type = RecordType.values[await raf.readByte()];
-
-      DatabaseRecord? record;
-      // print(type);
-      switch (type) {
-        case RecordType.cover:
-          record = await CoverRecord.read(raf);
-          if (record != null && record.status == RecordStatus.active) {
-            _coverRecord = (record as CoverRecord);
-          }
-          break;
-        case RecordType.json:
-          record = await JsonRecord.read(raf);
-          // print((record as JsonRecord).data);
-          break;
-        case RecordType.file:
-          // print(record);
-          record = await FileRecord.read(raf);
-          break;
-      }
-
-      if (record == null) continue;
-      if (status != RecordStatus.delete) continue;
-      list.add(record);
-    }
-
-    await raf.close();
-    return list;
-  }
-
-  ///
-  /// ### Delete Lock File
-  ///
-  Future<void> deleteLockFile() async {
-    if (_lockFile.existsSync()) {
-      await _lockFile.delete();
+      // last index
+      _lastIndex = meta.id > _lastIndex ? meta.id : lastIndex;
     }
   }
 
@@ -499,31 +196,4 @@ class IndexedDB {
   int get deletedCount => _deletedCount;
 
   int get deletedSize => _deletedSized;
-
-  ///
-  /// ## Cover Image Data
-  ///
-  // Future<Uint8List?> getCoverData() async {
-  //   print('record: $_coverRecord');
-  //   if (_coverRecord == null ||
-  //       !dbFile.existsSync() ||
-  //       _coverRecord!.dataStartOffset == -1) {
-  //     return null;
-  //   }
-  //   final raf = await dbFile.open();
-  //   final data = await _coverRecord!.getData(raf);
-  //   await raf.close();
-  //   return data;
-  // }
-
-  ///
-  /// ## Event Listener for DB
-  ///
-  // void _onEventListener() {
-  //   db.eventBus.on<DBEvent>().listen((event) {
-  //     if (event is CoverOffsetChanged && _coverRecord != null) {
-  //       _coverRecord!.copyWith(dataStartOffset: event.offset);
-  //     }
-  //   });
-  // }
 }

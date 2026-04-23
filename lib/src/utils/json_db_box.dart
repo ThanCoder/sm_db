@@ -2,16 +2,18 @@ import 'package:sm_db/sm_db.dart';
 import 'package:sm_db/src/indexed/indexed_db.dart';
 import 'package:sm_db/src/records/db_records.dart';
 import 'package:sm_db/src/records/json_record.dart';
-import 'package:sm_db/src/utils/json_db_adapter.dart';
 
 class JsonDBBox<T> {
   final IndexedDB _indexedDB;
   final SMDBJsonAdapter<T> _adapter;
+  final SMDB _db;
 
   const JsonDBBox({
+    required SMDB db,
     required IndexedDB indexedDB,
     required SMDBJsonAdapter<T> adapter,
-  }) : _indexedDB = indexedDB,
+  }) : _db = db,
+       _indexedDB = indexedDB,
        _adapter = adapter;
 
   /// ### Add in `Box<T>`
@@ -31,7 +33,7 @@ class JsonDBBox<T> {
     final map = _adapter.toMap(value);
     map['id'] = id;
 
-    final (record, bool) = await _indexedDB.db.addRecord(
+    final (record, bool) = await _db.addRecord(
       JsonRecord(
         id: id,
         jsonBytes: _adapter.encodeData(map),
@@ -53,7 +55,7 @@ class JsonDBBox<T> {
     bool willThrowExceptionByNotFoundId = true,
   }) async {
     final boxList = <JsonRecord>[];
-    for (var rec in _indexedDB.allActiveRecordList.toList()) {
+    for (var rec in _indexedDB.allRecordList.toList()) {
       if (rec.type != RecordType.json) continue;
       // filter current box type
       final jRec = rec;
@@ -70,29 +72,29 @@ class JsonDBBox<T> {
     // delete
     final record = boxList[index];
 
-    final isDeleted = await _indexedDB.db.removeRecord(record);
+    final isDeleted = await _db.removeRecord(record);
     // print('rec isDeleted: $isDeleted');
 
     // will delete parent record
     if (isDeleted && willDeleteByParentRecord) {
-      for (var parent in _indexedDB.allActiveRecordList.toList()) {
+      for (var parent in _indexedDB.allRecordList.toList()) {
         if (parent.type != RecordType.json ||
             parent.id == -1 ||
             (parent).id != record.parentId) {
           continue;
         }
-        await _indexedDB.db.removeRecord(parent, isCallMabyCompact: false);
+        await _db.removeRecord(parent, isCallMabyCompact: false);
       }
     }
     // will delete child record
     if (isDeleted && willDeleteByChildRecord) {
-      for (var child in _indexedDB.allActiveRecordList.toList()) {
+      for (var child in _indexedDB.allRecordList.toList()) {
         if (child.type != RecordType.json ||
             child.id == -1 ||
             (child).parentId != record.id) {
           continue;
         }
-        await _indexedDB.db.removeRecord(child, isCallMabyCompact: false);
+        await _db.removeRecord(child, isCallMabyCompact: false);
       }
     }
     return isDeleted;
@@ -103,24 +105,24 @@ class JsonDBBox<T> {
   ///
   Future<bool> deleteAll() async {
     final list = <JsonRecord>[];
-    for (var rec in _indexedDB.allActiveRecordList) {
+    for (var rec in _indexedDB.allRecordList) {
       if (rec.type != RecordType.json) continue;
       final jRec = rec;
       // filter field id
       if (jRec.adapterTypeId != _adapter.getUniqueFieldId) continue;
       list.add(jRec);
     }
-    return await _indexedDB.db.removeMultiRecord(list);
+    return await _db.removeMultiRecord(list);
   }
 
   ///
   /// ### Get By Id in `Box<T>`
   ///
   Future<T?> getById(int id) async {
-    final res = await _indexedDB.db.getById(id);
+    final res = await _db.getById(id);
     if (res == null) return null;
     if (res.type != RecordType.json) return null;
-    final raf = await _indexedDB.dbFile.open();
+    final raf = await _dbFile.open();
     final data = await (res as JsonRecord).getJsonData(raf);
     await raf.close();
     if (data == null) return null;
@@ -139,7 +141,7 @@ class JsonDBBox<T> {
       await deleteById(_adapter.getId(addedValue));
     }
     // update
-    final (_, result) = await _indexedDB.db.addRecord(
+    final (_, result) = await _db.addRecord(
       JsonRecord(
         id: id,
         jsonBytes: _adapter.encodeData(_adapter.toMap(value)),
@@ -169,12 +171,12 @@ class JsonDBBox<T> {
   /// ### Get By Parent Id in `Box<T>`
   ///
   Future<T?> getByParentId(int parentId) async {
-    for (var record in _indexedDB.allActiveRecordList) {
+    for (var record in _indexedDB.allRecordList) {
       if (record.type != RecordType.json) continue;
       final jsonRec = (record);
       if (jsonRec.parentId == parentId) {
         // read json data
-        final raf = await _indexedDB.dbFile.open();
+        final raf = await _dbFile.open();
         final data = await jsonRec.getJsonData(raf);
         await raf.close();
         if (data == null) continue;
@@ -189,12 +191,12 @@ class JsonDBBox<T> {
   ///
   Future<List<T>> getListByParentId(int parentId) async {
     List<T> results = [];
-    for (var record in _indexedDB.allActiveRecordList) {
+    for (var record in _indexedDB.allRecordList) {
       if (record.type != RecordType.json) continue;
       final jsonRec = (record);
       if (jsonRec.parentId == parentId) {
         // read json data
-        final raf = await _indexedDB.dbFile.open();
+        final raf = await _dbFile.open();
         final data = await jsonRec.getJsonData(raf);
         await raf.close();
         if (data == null) continue;
@@ -209,7 +211,7 @@ class JsonDBBox<T> {
   /// ### Get All in `Box<T>`
   ///
   Future<List<T>> getAll({int? parentId}) async {
-    final res = await _indexedDB.db.readAll();
+    final res = await _db.readAll();
     // print('box list: $res');
     List<T> list = [];
     for (var record in res) {
@@ -221,7 +223,7 @@ class JsonDBBox<T> {
         continue;
       }
       // read json data
-      final raf = await _indexedDB.dbFile.open();
+      final raf = await _dbFile.open();
       final data = await record.getJsonData(raf);
       await raf.close();
       if (data == null) continue;
@@ -235,7 +237,7 @@ class JsonDBBox<T> {
   /// ### Get All With Stream in `Box<T>`
   ///
   Stream<T> getAllStream({int? parentId}) async* {
-    final res = await _indexedDB.db.readAll();
+    final res = await _db.readAll();
     for (var record in res) {
       // json ပဲရယူမယ်
       if (record.status == RecordStatus.delete ||
@@ -247,7 +249,7 @@ class JsonDBBox<T> {
       // filter parent Id
       if (parentId != null && jsr.parentId != parentId) continue;
       // read json data
-      final raf = await _indexedDB.dbFile.open();
+      final raf = await _dbFile.open();
       final data = await jsr.getJsonData(raf);
       await raf.close();
       if (data == null) continue;

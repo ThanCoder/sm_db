@@ -122,13 +122,17 @@ class FileRecord extends DatabaseRecord {
     return offset + headerSize + infoSize + fileSize;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf, int offset) async {
-    final headerOffset = offset - 2; //status,type
+  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
+    final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(fileHeaderSize - 2));
     final id = data.getInt8Bytes(0);
     final infoSize = data.getInt8Bytes(8);
     final fileSize = data.getInt8Bytes(16);
     final recordTotalSize = fileHeaderSize + infoSize + fileSize;
+
+    //ခုန်ကျော်မယ်
+    final endPos = await raf.position();
+    await raf.setPosition(endPos + infoSize + fileSize);
 
     return RecordMeta(
       type: RecordType.file,

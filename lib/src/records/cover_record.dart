@@ -53,11 +53,15 @@ class CoverRecord extends DatabaseRecord {
     return offset + headerSize + imageBytes.length;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf, int offset) async {
-    final headerOffset = offset - 2; //status,type
+  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
+    final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(coverHeaderSize - 2));
     final size = data.getInt8Bytes(0);
     final recordTotalSize = coverHeaderSize + size;
+
+    //ခုန်ကျော်မယ်
+    final endPos = await raf.position();
+    await raf.setPosition(endPos + size);
 
     return RecordMeta(
       type: RecordType.cover,

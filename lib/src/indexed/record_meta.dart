@@ -30,18 +30,14 @@ class RecordMeta {
   ///
   /// ### Read Cover
   ///
-  static Future<RecordMeta> read(
-    RandomAccessFile raf,
-    int offset,
-    RecordType type,
-  ) async {
+  static Future<RecordMeta> read(RandomAccessFile raf, RecordType type) async {
     switch (type) {
       case RecordType.cover:
-        return CoverRecord.readMeta(raf, offset);
+        return CoverRecord.readMeta(raf);
       case RecordType.json:
-        return JsonRecord.readMeta(raf, offset);
+        return JsonRecord.readMeta(raf);
       case RecordType.file:
-        return FileRecord.readMeta(raf, offset);
+        return FileRecord.readMeta(raf);
     }
   }
 
