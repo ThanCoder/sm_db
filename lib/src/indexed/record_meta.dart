@@ -31,14 +31,13 @@ class RecordMeta {
   /// ### Read Cover
   ///
   static Future<RecordMeta> read(RandomAccessFile raf, RecordType type) async {
-    final pos = await raf.position() - 2;
     switch (type) {
       case RecordType.cover:
-        return CoverRecord.readMeta(raf, pos);
+        return CoverRecord.readMeta(raf);
       case RecordType.json:
-        return JsonRecord.readMeta(raf, pos);
+        return JsonRecord.readMeta(raf);
       case RecordType.file:
-        return FileRecord.readMeta(raf, pos);
+        return FileRecord.readMeta(raf);
     }
   }
 
@@ -70,10 +69,10 @@ class RecordMeta {
   /// Not Working `file`!!!
   ///
   static Future<Uint8List?> getData(
-    RandomAccessFile raf,
-    int dataStartOffset,
-    int dataSize,
-  ) async {
+    RandomAccessFile raf, {
+    required int dataStartOffset,
+    required int dataSize,
+  }) async {
     if (dataStartOffset == -1 || dataSize == 0) return null;
 
     // set

@@ -14,12 +14,6 @@ class CoverRecord extends DatabaseRecord {
     super.type = RecordType.cover,
   });
 
-  // factory CoverRecord.fromPath(String path) {
-  //   final file = File(path);
-  //   final imageBytes = file.readAsBytesSync();
-  //   return CoverRecord(imageBytes: imageBytes);
-  // }
-
   @override
   int getDataSize() {
     return imageBytes.length;
@@ -54,11 +48,17 @@ class CoverRecord extends DatabaseRecord {
   }
 
   static Future<RecordMeta> readMeta(
-    RandomAccessFile raf,
-    int headerOffset,
-  ) async {
-    // final headerOffset = (await raf.position()) - 2; //status,type
-    final data = ByteData.sublistView(await raf.read(coverHeaderSize - 2));
+    RandomAccessFile raf, {
+    int? headerOffset,
+  }) async {
+    final offset = await raf.position();
+
+    final readHeaderCount = headerOffset == null
+        ? jsonHeaderSize - 2
+        : jsonHeaderSize;
+    final realOffset = headerOffset ?? (offset - 2);
+
+    final data = ByteData.sublistView(await raf.read(readHeaderCount));
     final size = data.getInt8Bytes(0);
     final recordTotalSize = coverHeaderSize + size;
 
@@ -68,7 +68,7 @@ class CoverRecord extends DatabaseRecord {
 
     return RecordMeta(
       type: RecordType.cover,
-      offset: headerOffset,
+      offset: realOffset,
       recordTotalSize: recordTotalSize,
       dataSize: size,
     );

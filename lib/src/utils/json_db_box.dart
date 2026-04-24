@@ -2,6 +2,7 @@ import 'package:sm_db/sm_db.dart';
 import 'package:sm_db/src/indexed/indexed_db.dart';
 import 'package:sm_db/src/indexed/record_meta.dart';
 import 'package:sm_db/src/interfaces/smdb_box_interface.dart';
+import 'package:sm_db/src/records/db_records.dart';
 import 'package:sm_db/src/records/json_record.dart';
 
 class JsonDBBox<T> extends SmdbBoxInterface<T> {
@@ -67,14 +68,19 @@ class JsonDBBox<T> extends SmdbBoxInterface<T> {
   @override
   Future<List<T>> getAll({int? parentId}) async {
     final results = <T>[];
-    final raf = await _indexedDB.dbFile.open();
+    final raf = _indexedDB.readRaf;
 
     for (var item in _indexedDB.getAllJson(parentId: parentId)) {
-      final data = await RecordMeta.getData(raf, item.offset, item.dataSize);
+      final data = await RecordMeta.getData(
+        raf,
+        dataStartOffset: item.offset + jsonHeaderSize,
+        dataSize: item.dataSize,
+      );
       if (data == null) continue;
+      // print(_adapter.decodeData(data));
       results.add(_adapter.fromMap(_adapter.decodeData(data)));
+      // print(item);
     }
-    await raf.close();
     return results;
   }
 
@@ -104,7 +110,11 @@ class JsonDBBox<T> extends SmdbBoxInterface<T> {
     final raf = await _indexedDB.dbFile.open();
 
     for (var item in _indexedDB.getAllJson(parentId: parentId)) {
-      final data = await RecordMeta.getData(raf, item.offset, item.dataSize);
+      final data = await RecordMeta.getData(
+        raf,
+        dataStartOffset: item.offset + jsonHeaderSize,
+        dataSize: item.dataSize,
+      );
       if (data == null) continue;
       yield _adapter.fromMap(_adapter.decodeData(data));
     }

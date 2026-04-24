@@ -111,6 +111,7 @@ class SMDB {
     if (isClearAllAdapter) {
       clearAllAdapter();
     }
+    await _indexedDB.close();
   }
 
   ///

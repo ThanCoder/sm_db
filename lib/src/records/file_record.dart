@@ -104,11 +104,17 @@ class FileRecord extends DatabaseRecord {
   }
 
   static Future<RecordMeta> readMeta(
-    RandomAccessFile raf,
-    int headerOffset,
-  ) async {
-    // final headerOffset = (await raf.position()) - 2; //status,type
-    final data = ByteData.sublistView(await raf.read(fileHeaderSize - 2));
+    RandomAccessFile raf, {
+    int? headerOffset,
+  }) async {
+    final offset = await raf.position();
+
+    final readHeaderCount = headerOffset == null
+        ? jsonHeaderSize - 2
+        : jsonHeaderSize;
+    final realOffset = headerOffset ?? (offset - 2);
+
+    final data = ByteData.sublistView(await raf.read(readHeaderCount));
     final id = data.getInt8Bytes(0);
     final infoSize = data.getInt8Bytes(8);
     final fileSize = data.getInt8Bytes(16);
@@ -121,7 +127,7 @@ class FileRecord extends DatabaseRecord {
     return RecordMeta(
       type: RecordType.file,
       id: id,
-      offset: headerOffset,
+      offset: realOffset,
       recordTotalSize: recordTotalSize,
       dataSize: fileSize,
       fileInfoSize: infoSize,

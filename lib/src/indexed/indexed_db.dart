@@ -13,6 +13,7 @@ class IndexedDB {
   late File dbFile;
   late SMDBConfig config;
   late RandomAccessFile _writeRaf;
+  late RandomAccessFile readRaf;
 
   Future<void> setConfig({
     required SMDB db,
@@ -49,6 +50,7 @@ class IndexedDB {
     }
     await _buildIndexInDatabase();
     _writeRaf = await dbFile.open(mode: FileMode.append);
+    readRaf = await dbFile.open(mode: FileMode.read);
   }
 
   Future<void> writeHeader(RandomAccessFile raf) async {
@@ -73,9 +75,13 @@ class IndexedDB {
     if (!dbFile.existsSync()) return;
     final size = dbFile.lengthSync();
     // read header
-    await readHeader(raf, type: config.dbType, version: config.dbVersion);
+    _header = await readHeader(
+      raf,
+      type: config.dbType,
+      version: config.dbVersion,
+    );
 
-    while (await raf.position() < size) {
+    while ((await raf.position()) < size) {
       final statusIndex = await raf.readByte();
       if (statusIndex == -1) {
         throw Exception('Status Not Found / End of File!');
@@ -84,6 +90,7 @@ class IndexedDB {
       final type = RecordType.values[await raf.readByte()];
 
       final meta = await RecordMeta.read(raf, type);
+
       if (status == RecordStatus.active) {
         _allRecordList.add(meta);
         // set parent
@@ -151,9 +158,7 @@ class IndexedDB {
     if (record.type == RecordType.cover) {
       final offset = await (record as CoverRecord).write(_writeRaf);
       await _writeRaf.flush(); //disk ထဲထည့်သွင်းခြင်း
-      final raf = await dbFile.open();
-      final res = await CoverRecord.readMeta(raf, offset);
-      await raf.close();
+      final res = await CoverRecord.readMeta(readRaf, headerOffset: offset);
       _allRecordList.add(res);
       return offset;
     }
@@ -161,9 +166,7 @@ class IndexedDB {
     if (record.type == RecordType.json) {
       final offset = await (record as JsonRecord).write(_writeRaf);
       await _writeRaf.flush(); //disk ထဲထည့်သွင်းခြင်း
-      final raf = await dbFile.open();
-      final res = await JsonRecord.readMeta(raf, offset);
-      await raf.close();
+      final res = await JsonRecord.readMeta(readRaf, realHeaderOffset: offset);
       _allRecordList.add(res);
       if (res.parentId != -1) {
         _parentOfChild.putIfAbsent(res.parentId, () => []).add(res);
@@ -178,9 +181,7 @@ class IndexedDB {
         onProgress: onProgress,
       );
       await _writeRaf.flush(); //disk ထဲထည့်သွင်းခြင်း
-      final raf = await dbFile.open();
-      final res = await FileRecord.readMeta(raf, offset);
-      await raf.close();
+      final res = await FileRecord.readMeta(readRaf, headerOffset: offset);
       _allRecordList.add(res);
       return offset;
     }
@@ -226,18 +227,18 @@ class IndexedDB {
     // add RAM
     for (var added in addedRecords) {
       if (added.$2 == RecordType.cover) {
-        final res = await CoverRecord.readMeta(raf, added.$1);
+        final res = await CoverRecord.readMeta(raf, headerOffset: added.$1);
         _allRecordList.add(res);
       }
       if (added.$2 == RecordType.json) {
-        final res = await JsonRecord.readMeta(raf, added.$1);
+        final res = await JsonRecord.readMeta(raf, realHeaderOffset: added.$1);
         if (res.parentId != -1) {
           _parentOfChild.putIfAbsent(res.parentId, () => []).add(res);
         }
         _allRecordList.add(res);
       }
       if (added.$2 == RecordType.file) {
-        final res = await FileRecord.readMeta(raf, added.$1);
+        final res = await FileRecord.readMeta(raf, headerOffset: added.$1);
         _allRecordList.add(res);
       }
     }
@@ -271,7 +272,7 @@ class IndexedDB {
       await _writeRaf.flush(); //disk ထဲထည့်သွင်းခြင်း
 
       final raf = await dbFile.open();
-      final res = await JsonRecord.readMeta(raf, offset);
+      final res = await JsonRecord.readMeta(raf, realHeaderOffset: offset);
       await raf.close();
       _allRecordList[index] = res;
     }
@@ -284,7 +285,7 @@ class IndexedDB {
       );
       await _writeRaf.flush(); //disk ထဲထည့်သွင်းခြင်း
       final raf = await dbFile.open();
-      final res = await FileRecord.readMeta(raf, offset);
+      final res = await FileRecord.readMeta(raf, headerOffset: offset);
       await raf.close();
       _allRecordList[index] = res;
     }
@@ -400,6 +401,11 @@ class IndexedDB {
     }
     await compactFile.rename(dbFile.path);
     await loadIndexed();
+  }
+
+  Future<void> close() async {
+    await _writeRaf.close();
+    await readRaf.close();
   }
 
   int get deletedCount => _deletedCount;

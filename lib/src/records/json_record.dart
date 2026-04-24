@@ -56,11 +56,19 @@ class JsonRecord extends DatabaseRecord {
   }
 
   static Future<RecordMeta> readMeta(
-    RandomAccessFile raf,
-    int headerOffset,
-  ) async {
-    // final headerOffset = (await raf.position()) - 2; //status,type
-    final data = ByteData.sublistView(await raf.read(jsonHeaderSize - 2));
+    RandomAccessFile raf, {
+    int? realHeaderOffset,
+  }) async {
+    if (realHeaderOffset != null) {
+      await raf.setPosition(realHeaderOffset);
+    }
+    final offset = await raf.position();
+    final readHeaderCount = realHeaderOffset == null
+        ? jsonHeaderSize - 2
+        : jsonHeaderSize;
+    final realOffset = realHeaderOffset ?? (offset - 2);
+
+    final data = ByteData.sublistView(await raf.read(readHeaderCount));
 
     final adapterTypeId = data.getInt1Byte(0);
     final id = data.getInt8Bytes(1);
@@ -77,7 +85,7 @@ class JsonRecord extends DatabaseRecord {
       id: id,
       adapterTypeId: adapterTypeId,
       parentId: parentId,
-      offset: headerOffset,
+      offset: realOffset,
       recordTotalSize: recordTotalSize,
       dataSize: jsonSize,
     );

@@ -12,6 +12,7 @@ void main() async {
   final box = db.getBox<Post>();
   // await box.add(Post(title: 'post two'));
   // await box.add(Post(title: 'post three'));
+
   // await box.deleteById(1);
   // await box.deleteById(2);
   // await box.deleteById(1);
@@ -22,6 +23,8 @@ void main() async {
   print('deletedCount: ${db.deletedCount}');
   print('deletedSize: ${db.deletedSize}');
   print('Type: ${db.header}');
+
+  await db.close();
 }
 
 class PostAdapter extends SMDBJsonAdapter<Post> {
