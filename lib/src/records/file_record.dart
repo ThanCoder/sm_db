@@ -13,7 +13,7 @@ class FileRecord extends DatabaseRecord {
   final Map<String, dynamic> info;
   final String? sourcePath;
 
-  const FileRecord({
+  FileRecord({
     required this.name,
     required this.fileSize,
     required this.infoSize,
@@ -23,29 +23,6 @@ class FileRecord extends DatabaseRecord {
     required super.id,
     super.type = RecordType.file,
   });
-
-  // factory FileRecord.fromPath(
-  //   String path, {
-  //   Map<String, dynamic> extraInfo = const {},
-  //   int id = -1,
-  // }) {
-  //   final file = File(path);
-  //   if (!file.existsSync()) {
-  //     throw PathNotFoundException(path, OSError('File Path Not Found!'));
-  //   }
-  //   return FileRecord(
-  //     name: file.getName(),
-  //     info: {
-  //       'name': file.getName(),
-  //       'ext': file.extName,
-  //       'size': file.size,
-  //       ...extraInfo,
-  //     },
-  //     id: id,
-  //     sourcePath: path,
-  //     fileSize: file.size,
-  //   );
-  // }
 
   @override
   int getDataSize() {
@@ -92,6 +69,8 @@ class FileRecord extends DatabaseRecord {
     final reader = await file.open();
     try {
       final int chunkSize = 1024 * 1024; //1MB
+      final buffer = Uint8List(chunkSize);
+
       int totalWritten = 0;
 
       while (totalWritten < fSize) {
@@ -102,11 +81,12 @@ class FileRecord extends DatabaseRecord {
 
         final remaining = fSize - totalWritten;
         final toRead = remaining > chunkSize ? chunkSize : remaining;
-        final buffer = await reader.read(toRead);
+        final bytesRead = await reader.readInto(buffer, 0, toRead);
+        if (bytesRead <= 0) break;
 
         // write
-        await raf.writeFrom(buffer);
-        totalWritten += buffer.length;
+        await raf.writeFrom(buffer, 0, bytesRead);
+        totalWritten += bytesRead;
 
         // progress
         onProgress?.call(totalWritten / fSize);
@@ -114,6 +94,7 @@ class FileRecord extends DatabaseRecord {
     } catch (e) {
       await reader.close();
     }
+
     return startPosition; // အောင်မြင်စွာ ရေးပြီးပြီ
   }
 
@@ -122,8 +103,11 @@ class FileRecord extends DatabaseRecord {
     return offset + headerSize + infoSize + fileSize;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
-    final headerOffset = (await raf.position()) - 2; //status,type
+  static Future<RecordMeta> readMeta(
+    RandomAccessFile raf,
+    int headerOffset,
+  ) async {
+    // final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(fileHeaderSize - 2));
     final id = data.getInt8Bytes(0);
     final infoSize = data.getInt8Bytes(8);
@@ -143,72 +127,4 @@ class FileRecord extends DatabaseRecord {
       fileInfoSize: infoSize,
     );
   }
-
-  ///
-  /// ## Extract File
-  ///
-  // Future<void> extract(
-  //   RandomAccessFile raf, {
-  //   required String savePath,
-  //   bool Function()? isCancelled,
-  //   void Function(double progress)? onProgress,
-  // }) async {
-  //   if (dataStartOffset == -1) {
-  //     throw Exception('File `dataStartOffset` is -1');
-  //   }
-  //   final currentPos = await raf.position();
-  //   // go to
-  //   await raf.setPosition(dataStartOffset);
-
-  //   // 2. Output file ကို အသစ်ဆောက်မည်
-  //   final outputFile = File(savePath);
-  //   final ios = await outputFile.open(mode: FileMode.write);
-
-  //   int bytesReaded = 0;
-  //   final int bufferSize = 1024 * 1024; //1MB
-
-  //   while (bytesReaded < fileSize) {
-  //     // Cancel လုပ်ထားလျှင် ရပ်မည်
-  //     if (isCancelled != null && isCancelled()) {
-  //       break;
-  //     }
-  //     // ကျန်ရှိသော byte ပမာဏနှင့် buffer size ထဲမှ အနည်းဆုံးကို ယူမည်
-  //     final remaining = fileSize - bytesReaded;
-  //     final toRead = remaining < bufferSize ? remaining : bufferSize;
-  //     // Data ကို ဖတ်ပြီး အသစ်ထဲသို့ ရေးမည်
-  //     final buffer = await raf.read(toRead);
-  //     await ios.writeFrom(buffer);
-  //     // add
-  //     bytesReaded += buffer.length;
-  //     // Progress ကို 0.0 မှ 1.0 ကြား တွက်ချက်ပေးမည်
-  //     if (onProgress != null) {
-  //       onProgress(bytesReaded / fileSize);
-  //     }
-  //   }
-
-  //   await raf.setPosition(currentPos);
-  //   await ios.close();
-  // }
-
-  // static Future<FileRecord?> read(RandomAccessFile raf) async {
-  //   final meta = ByteData.sublistView(await raf.read(24));
-  //   final id = meta.getInt64(0);
-  //   final infoSize = meta.getInt64(8);
-  //   final fileSize = meta.getInt64(16);
-  //   // read info
-  //   final info = jsonDecode(utf8.decode(await raf.read(infoSize)));
-
-  //   final fileOffset = await raf.position();
-  //   // skip ထားမယ် memory မှာမထားပဲ offset ပဲသိမ်းဆည်းထားမယ်
-  //   await raf.setPosition(fileOffset + fileSize);
-
-  //   return FileRecord(
-  //     name: info['name'],
-  //     info: info,
-  //     id: id,
-  //     fileSize: fileSize,
-  //     infoSize: infoSize,
-  //     dataStartOffset: fileOffset,
-  //   );
-  // }
 }

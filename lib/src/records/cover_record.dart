@@ -8,7 +8,7 @@ import 'package:sm_db/src/records/db_records.dart';
 class CoverRecord extends DatabaseRecord {
   final Uint8List imageBytes;
 
-  const CoverRecord({
+  CoverRecord({
     required this.imageBytes,
     required super.offset,
     super.type = RecordType.cover,
@@ -53,8 +53,11 @@ class CoverRecord extends DatabaseRecord {
     return offset + headerSize + imageBytes.length;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
-    final headerOffset = (await raf.position()) - 2; //status,type
+  static Future<RecordMeta> readMeta(
+    RandomAccessFile raf,
+    int headerOffset,
+  ) async {
+    // final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(coverHeaderSize - 2));
     final size = data.getInt8Bytes(0);
     final recordTotalSize = coverHeaderSize + size;

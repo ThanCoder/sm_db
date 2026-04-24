@@ -1,287 +1,150 @@
 import 'package:sm_db/sm_db.dart';
 import 'package:sm_db/src/indexed/indexed_db.dart';
-import 'package:sm_db/src/records/db_records.dart';
+import 'package:sm_db/src/indexed/record_meta.dart';
+import 'package:sm_db/src/interfaces/smdb_box_interface.dart';
 import 'package:sm_db/src/records/json_record.dart';
 
-class JsonDBBox<T> {
+class JsonDBBox<T> extends SmdbBoxInterface<T> {
   final IndexedDB _indexedDB;
   final SMDBJsonAdapter<T> _adapter;
-  final SMDB _db;
 
-  const JsonDBBox({
+  JsonDBBox({
     required SMDB db,
     required IndexedDB indexedDB,
     required SMDBJsonAdapter<T> adapter,
-  }) : _db = db,
-       _indexedDB = indexedDB,
+  }) : _indexedDB = indexedDB,
        _adapter = adapter;
 
-  /// ### Add in `Box<T>`
-  ///
-  /// Return T? `[addedValue]`
-  ///
-  /// `parentId ?? SMDBJsonAdapter.getParentId(T value)`
-  ///
-  /// ```dart
-  /// abstract class SMDBJsonAdapter<T>
-  ///   int getParentId(T value) => -1; <--- Need To Override
-  ///
-  ///```
-
+  @override
   Future<T?> add(T value, {int? parentId}) async {
     final id = _indexedDB.generateNextId();
     final map = _adapter.toMap(value);
     map['id'] = id;
+    map['autoId'] = id;
+    final jsonBytes = _adapter.encodeData(map);
 
-    final (record, bool) = await _db.addRecord(
+    await _indexedDB.add(
       JsonRecord(
         id: id,
-        jsonBytes: _adapter.encodeData(map),
-        adapterTypeId: _adapter.getUniqueFieldId,
+        adapterTypeId: _adapter.adapterTypeId,
         parentId: parentId ?? _adapter.getParentId(value),
+        jsonSize: jsonBytes.length,
+        jsonBytes: jsonBytes,
       ),
     );
-
-    return bool ? _adapter.fromMap(map) : null;
+    return _adapter.fromMap(map);
   }
 
-  ///
-  /// ### Remove Record  in `Box<T>`
-  ///
-  Future<bool> deleteById(
-    int id, {
-    bool willDeleteByParentRecord = false,
-    bool willDeleteByChildRecord = false,
-    bool willThrowExceptionByNotFoundId = true,
-  }) async {
-    final boxList = <JsonRecord>[];
-    for (var rec in _indexedDB.allRecordList.toList()) {
-      if (rec.type != RecordType.json) continue;
-      // filter current box type
-      final jRec = rec;
-      if (jRec.adapterTypeId != _adapter.getUniqueFieldId) continue;
-      boxList.add(jRec);
-    }
-
-    final index = boxList.indexWhere((e) => e.id == id);
-    if (index == -1 && willThrowExceptionByNotFoundId) {
-      throw Exception('Not Found ID:`$id` In Box<$T> List');
-    } else if (index == -1) {
-      return false;
-    }
-    // delete
-    final record = boxList[index];
-
-    final isDeleted = await _db.removeRecord(record);
-    // print('rec isDeleted: $isDeleted');
-
-    // will delete parent record
-    if (isDeleted && willDeleteByParentRecord) {
-      for (var parent in _indexedDB.allRecordList.toList()) {
-        if (parent.type != RecordType.json ||
-            parent.id == -1 ||
-            (parent).id != record.parentId) {
-          continue;
-        }
-        await _db.removeRecord(parent, isCallMabyCompact: false);
-      }
-    }
-    // will delete child record
-    if (isDeleted && willDeleteByChildRecord) {
-      for (var child in _indexedDB.allRecordList.toList()) {
-        if (child.type != RecordType.json ||
-            child.id == -1 ||
-            (child).parentId != record.id) {
-          continue;
-        }
-        await _db.removeRecord(child, isCallMabyCompact: false);
-      }
-    }
-    return isDeleted;
-  }
-
-  ///
-  /// ### Delete All in `Box<T>`
-  ///
-  Future<bool> deleteAll() async {
-    final list = <JsonRecord>[];
-    for (var rec in _indexedDB.allRecordList) {
-      if (rec.type != RecordType.json) continue;
-      final jRec = rec;
-      // filter field id
-      if (jRec.adapterTypeId != _adapter.getUniqueFieldId) continue;
-      list.add(jRec);
-    }
-    return await _db.removeMultiRecord(list);
-  }
-
-  ///
-  /// ### Get By Id in `Box<T>`
-  ///
-  Future<T?> getById(int id) async {
-    final res = await _db.getById(id);
-    if (res == null) return null;
-    if (res.type != RecordType.json) return null;
-    final raf = await _dbFile.open();
-    final data = await (res as JsonRecord).getJsonData(raf);
-    await raf.close();
-    if (data == null) return null;
-    return _adapter.fromMap(_adapter.decodeData(data));
-  }
-
-  ///
-  /// ### Update By Id in `Box<T>`
-  ///
-  /// Return `newValue`
-  ///
-  Future<bool> updateById(int id, {required T value}) async {
-    final addedValue = await getById(id);
-    if (addedValue != null) {
-      // delete
-      await deleteById(_adapter.getId(addedValue));
-    }
-    // update
-    final (_, result) = await _db.addRecord(
-      JsonRecord(
+  @override
+  Future<void> addAll(List<T> values, {int? parentId}) async {
+    final records = values.map((e) {
+      final id = _indexedDB.generateNextId();
+      final map = _adapter.toMap(e);
+      map['id'] = id;
+      map['autoId'] = id;
+      final jsonBytes = _adapter.encodeData(map);
+      return JsonRecord(
         id: id,
-        jsonBytes: _adapter.encodeData(_adapter.toMap(value)),
-        adapterTypeId: _adapter.getUniqueFieldId,
-        parentId: _adapter.getParentId(value),
-      ),
-    );
-    return result;
+        adapterTypeId: _adapter.adapterTypeId,
+        parentId: parentId ?? _adapter.getParentId(e),
+        jsonSize: jsonBytes.length,
+        jsonBytes: jsonBytes,
+      );
+    }).toList();
+    await _indexedDB.addMultiple(records);
   }
 
-  ///
-  /// ### Update One in `Box<T>`
-  ///
-  /// Return `newValue`
-  ///
-  Future<T?> updateOne(bool Function(T value) test, {required T value}) async {
-    final addedValue = await getOne(test);
-    if (addedValue != null) {
-      // delete
-      await deleteById(_adapter.getId(addedValue));
+  @override
+  Future<void> deleteAll(List<int> idList) async {
+    await _indexedDB.deleteMultiple(idList);
+  }
+
+  @override
+  Future<bool> deleteById(int id) async {
+    return await _indexedDB.deleteById(id);
+  }
+
+  @override
+  Future<List<T>> getAll({int? parentId}) async {
+    final results = <T>[];
+    final raf = await _indexedDB.dbFile.open();
+
+    for (var item in _indexedDB.getAllJson(parentId: parentId)) {
+      final data = await RecordMeta.getData(raf, item.offset, item.dataSize);
+      if (data == null) continue;
+      results.add(_adapter.fromMap(_adapter.decodeData(data)));
     }
-    //update
-    return await add(value);
+    await raf.close();
+    return results;
   }
 
-  ///
-  /// ### Get By Parent Id in `Box<T>`
-  ///
-  Future<T?> getByParentId(int parentId) async {
-    for (var record in _indexedDB.allRecordList) {
-      if (record.type != RecordType.json) continue;
-      final jsonRec = (record);
-      if (jsonRec.parentId == parentId) {
-        // read json data
-        final raf = await _dbFile.open();
-        final data = await jsonRec.getJsonData(raf);
-        await raf.close();
-        if (data == null) continue;
-        return _adapter.fromMap(_adapter.decodeData(data));
+  @override
+  Future<List<T>> getAllQuery(
+    bool Function(T value) test, {
+    int? parentId,
+  }) async {
+    final list = await getAll(parentId: parentId);
+    return list.where(test).toList();
+  }
+
+  @override
+  Stream<T> getAllQueryStream(
+    bool Function(T value) test, {
+    int? parentId,
+  }) async* {
+    await for (var item in getAllStream(parentId: parentId)) {
+      if (test(item)) {
+        yield item;
+      }
+    }
+  }
+
+  @override
+  Stream<T> getAllStream({int? parentId}) async* {
+    final raf = await _indexedDB.dbFile.open();
+
+    for (var item in _indexedDB.getAllJson(parentId: parentId)) {
+      final data = await RecordMeta.getData(raf, item.offset, item.dataSize);
+      if (data == null) continue;
+      yield _adapter.fromMap(_adapter.decodeData(data));
+    }
+    await raf.close();
+  }
+
+  @override
+  Future<T?> getOne(bool Function(T value) test, {int? parentId}) async {
+    for (var item in await getAll(parentId: parentId)) {
+      if (test(item)) {
+        return item;
       }
     }
     return null;
   }
 
-  ///
-  /// ### Get List By Parent Id in `Box<T>`
-  ///
-  Future<List<T>> getListByParentId(int parentId) async {
-    List<T> results = [];
-    for (var record in _indexedDB.allRecordList) {
-      if (record.type != RecordType.json) continue;
-      final jsonRec = (record);
-      if (jsonRec.parentId == parentId) {
-        // read json data
-        final raf = await _dbFile.open();
-        final data = await jsonRec.getJsonData(raf);
-        await raf.close();
-        if (data == null) continue;
-        final value = _adapter.fromMap(_adapter.decodeData(data));
-        results.add(value);
-      }
-    }
-    return results;
-  }
-
-  ///
-  /// ### Get All in `Box<T>`
-  ///
-  Future<List<T>> getAll({int? parentId}) async {
-    final res = await _db.readAll();
-    // print('box list: $res');
-    List<T> list = [];
-    for (var record in res) {
-      if (record.adapterTypeId != _adapter.getUniqueFieldId) continue;
-      // filter parent Id
-      if (parentId != null &&
-          record.parentId != -1 &&
-          record.parentId != parentId) {
-        continue;
-      }
-      // read json data
-      final raf = await _dbFile.open();
-      final data = await record.getJsonData(raf);
-      await raf.close();
-      if (data == null) continue;
-      //add
-      list.add(_adapter.fromMap(_adapter.decodeData(data)));
-    }
-    return list;
-  }
-
-  ///
-  /// ### Get All With Stream in `Box<T>`
-  ///
-  Stream<T> getAllStream({int? parentId}) async* {
-    final res = await _db.readAll();
-    for (var record in res) {
-      // json ပဲရယူမယ်
-      if (record.status == RecordStatus.delete ||
-          record.type != RecordType.json) {
-        continue;
-      }
-      final jsr = record;
-      if (jsr.adapterTypeId != _adapter.getUniqueFieldId) continue;
-      // filter parent Id
-      if (parentId != null && jsr.parentId != parentId) continue;
-      // read json data
-      final raf = await _dbFile.open();
-      final data = await jsr.getJsonData(raf);
-      await raf.close();
-      if (data == null) continue;
-
-      final value = _adapter.fromMap(_adapter.decodeData(data));
-      //delay
-      // await Future.delayed(Duration(seconds: 1));
-      yield value;
-    }
-  }
-
-  ///
-  /// ### Get One in `Box<T>`
-  ///
-  Future<T?> getOne(bool Function(T value) test, {int? parentId}) async {
-    final list = await getAll(parentId: parentId);
-    final index = list.indexWhere(test);
-    if (index == -1) return null;
-    return list[index];
-  }
-
-  ///
-  /// ### Get One With Stream in `Box<T>`
-  ///
+  @override
   Stream<T?> getOneStream(bool Function(T value) test, {int? parentId}) async* {
-    final stream = getAllStream(parentId: parentId);
-    await for (var value in stream) {
-      if (test(value)) {
-        yield value;
+    await for (var item in getAllStream(parentId: parentId)) {
+      if (test(item)) {
+        yield item;
         return;
       }
     }
     yield null;
+  }
+
+  @override
+  Future<bool> updateById(int id, T value) async {
+    final map = _adapter.toMap(value);
+    map['id'] = id;
+    map['autoId'] = id;
+    final jsonBytes = _adapter.encodeData(map);
+    final record = JsonRecord(
+      id: id,
+      adapterTypeId: _adapter.adapterTypeId,
+      parentId: _adapter.getParentId(value),
+      jsonSize: jsonBytes.length,
+      jsonBytes: jsonBytes,
+    );
+    return _indexedDB.updateById(id, record);
   }
 }

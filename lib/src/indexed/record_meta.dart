@@ -31,18 +31,43 @@ class RecordMeta {
   /// ### Read Cover
   ///
   static Future<RecordMeta> read(RandomAccessFile raf, RecordType type) async {
+    final pos = await raf.position() - 2;
     switch (type) {
       case RecordType.cover:
-        return CoverRecord.readMeta(raf);
+        return CoverRecord.readMeta(raf, pos);
       case RecordType.json:
-        return JsonRecord.readMeta(raf);
+        return JsonRecord.readMeta(raf, pos);
       case RecordType.file:
-        return FileRecord.readMeta(raf);
+        return FileRecord.readMeta(raf, pos);
     }
   }
 
   ///
+  /// ### Delete Mark Database Record
+  ///
+  Future<bool> deleteAsMark(RandomAccessFile raf) async {
+    if (offset == -1) return false;
+
+    final current = await raf.position();
+
+    // 1. Header နေရာသို့ သွား၍ Status ကို Update လုပ်မည်
+    await raf.setPosition(offset);
+
+    // 3. File ထဲသို့ Status Index ကို ရေးမည်
+    await raf.writeByte(RecordStatus.delete.index);
+
+    // 4. မူလ Position သို့ ပြန်သွားမည်
+    await raf.setPosition(current);
+
+    return true;
+  }
+
+  ///
   /// ### Read Data Bytes
+  ///
+  /// Working `cover`,`json`
+  ///
+  /// Not Working `file`!!!
   ///
   static Future<Uint8List?> getData(
     RandomAccessFile raf,

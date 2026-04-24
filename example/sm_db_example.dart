@@ -4,7 +4,6 @@ import 'package:sm_db/sm_db.dart';
 
 void main() async {
   final db = SMDB.getInstance();
-
   db.registerAdapterNotExists<Post>(PostAdapter());
   db.registerAdapterNotExists<PostContent>(PostContentAdapter());
 
@@ -17,35 +16,7 @@ void main() async {
   // await box.deleteById(2);
   // await box.deleteById(1);
 
-  for (var post in await box.getAll()) {
-    print('id: ${post.id} - title: ${post.title}');
-  }
-
-  // final files = await db.readAllFileRecordsInDatabase();
-  // await db.mabyCompact();
-
-  // await db.removeRecord(files.first);
-
-  // await db.addFile(
-  //   '/home/thancoder/Downloads/blender-5.1.0-linux-x64.tar.xz',
-  //   onProgress: (progress) =>
-  //       print('Progress: ${(progress * 100).toStringAsFixed(2)}%'),
-  // );
-  // await db.extractFile(
-  //   files.first,
-  //   savePath: files.first.name,
-  //   onProgress: (progress) =>
-  //       print('Progress: ${(progress * 100).toStringAsFixed(2)}%'),
-  // );
-  // await db.deleteCover();
-  // print(files.first.info);
-  // await db.removeRecord(files.last);
-  // await db.compact(
-  //   onProgress: (progress) =>
-  //       print('Progress: ${(progress * 100).toStringAsFixed(2)}%'),
-  // );
-
-  print('all record: ${await db.readAll()}');
+  print(await box.getAll());
 
   print('lastIndex: ${db.lastIndex}');
   print('deletedCount: ${db.deletedCount}');
@@ -60,9 +31,6 @@ class PostAdapter extends SMDBJsonAdapter<Post> {
   }
 
   @override
-  int get getUniqueFieldId => 1;
-
-  @override
   int getId(Post value) {
     return value.id;
   }
@@ -71,6 +39,9 @@ class PostAdapter extends SMDBJsonAdapter<Post> {
   Map<String, dynamic> toMap(Post value) {
     return value.toJson();
   }
+
+  @override
+  int get adapterTypeId => 1;
 }
 
 class PostContentAdapter extends SMDBJsonAdapter<PostContent> {
@@ -85,9 +56,6 @@ class PostContentAdapter extends SMDBJsonAdapter<PostContent> {
   }
 
   @override
-  int get getUniqueFieldId => 2;
-
-  @override
   Map<String, dynamic> toMap(PostContent value) {
     return value.toJson();
   }
@@ -96,6 +64,9 @@ class PostContentAdapter extends SMDBJsonAdapter<PostContent> {
   int getParentId(PostContent value) {
     return value.parentId;
   }
+
+  @override
+  int get adapterTypeId => 2;
 }
 
 class Post {
@@ -110,6 +81,10 @@ class Post {
 
   factory Post.fromJson(Map<String, dynamic> json) {
     return Post(id: json['id'], title: json['title']);
+  }
+  @override
+  String toString() {
+    return 'ID: $id - Title: $title';
   }
 }
 
@@ -134,5 +109,9 @@ class PostContent {
       parentId: json['parentId'],
       content: json['content'],
     );
+  }
+  @override
+  String toString() {
+    return 'ID: $id - parentId: $parentId';
   }
 }

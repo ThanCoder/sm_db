@@ -11,12 +11,13 @@ class JsonRecord extends DatabaseRecord {
   final int jsonSize;
   final Uint8List jsonBytes;
 
-  const JsonRecord({
+  JsonRecord({
+    required super.id,
     required this.adapterTypeId,
     required this.parentId,
     required this.jsonSize,
     required this.jsonBytes,
-    required super.offset,
+    super.offset = -1,
     super.type = RecordType.json,
   });
 
@@ -51,12 +52,14 @@ class JsonRecord extends DatabaseRecord {
     builder.add(jsonBytes);
     // write
     await raf.writeFrom(builder.takeBytes());
-
     return startOffset;
   }
 
-  static Future<RecordMeta> readMeta(RandomAccessFile raf) async {
-    final headerOffset = (await raf.position()) - 2; //status,type
+  static Future<RecordMeta> readMeta(
+    RandomAccessFile raf,
+    int headerOffset,
+  ) async {
+    // final headerOffset = (await raf.position()) - 2; //status,type
     final data = ByteData.sublistView(await raf.read(jsonHeaderSize - 2));
 
     final adapterTypeId = data.getInt1Byte(0);
